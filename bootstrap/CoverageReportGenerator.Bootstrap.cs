@@ -35,7 +35,7 @@ try
         "-o", options.OutputDirectory
     ]);
 
-    Console.WriteLine($"CoverageReportGenerator was published to: {Path.GetFullPath(options.OutputDirectory)}");
+    Console.WriteLine($"CoverageReportGenerator を出力しました: {Path.GetFullPath(options.OutputDirectory)}");
 }
 finally
 {
@@ -131,7 +131,7 @@ sealed record BootstrapOptions(
                     Environment.Exit(0);
                     break;
                 default:
-                    throw new ArgumentException($"Unknown option: {arg}");
+                    throw new ArgumentException($"不明なオプションです: {arg}");
             }
         }
 
@@ -142,7 +142,7 @@ sealed record BootstrapOptions(
     {
         if (index + 1 >= args.Length)
         {
-            throw new ArgumentException($"{option} requires a value.");
+            throw new ArgumentException($"{option} には値が必要です。");
         }
 
         index++;
@@ -154,11 +154,11 @@ sealed record BootstrapOptions(
         Console.WriteLine("""
             CoverageReportGenerator Bootstrap
 
-            Options:
-              --output <path>    Publish output directory. Default: ./dist
-              --source <path>    Use an existing local source directory.
-              --repo-zip <url>   Download a repository zip archive. Default: public main branch archive.
-              --keep-temp        Keep temporary download/extraction files.
+            オプション:
+              --output <path>    publish先フォルダ。既定値: ./dist
+              --source <path>    既存のローカルソースフォルダを使用します。
+              --repo-zip <url>   リポジトリzipをダウンロードします。既定値: public mainブランチのzip。
+              --keep-temp        一時ダウンロード/展開ファイルを残します。
             """);
     }
 }

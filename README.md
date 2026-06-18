@@ -1,22 +1,24 @@
 # CoverageReportGenerator
 
-C# WinForms tool that reads JetBrains dotCover DetailedXML and generates an offline HTML coverage report for Razor Pages projects.
+C# / WinForms で作成した、JetBrains dotCover DetailedXML からオフライン閲覧できるHTMLカバレッジレポートを生成するツールです。
 
-## Features
+主な対象は Razor Pages プロジェクトです。`.csproj` を読み込み、Roslyn AST解析でソース上のメソッドや行範囲を把握したうえで、dotCover XMLのStatement情報をHTMLに変換します。
 
-- Select a `.csproj` and a dotCover DetailedXML file.
-- Analyze project, folder, or single-file scopes.
-- Recursively include files under a selected folder.
-- Filter files with semicolon-separated wildcard patterns.
-- Cache `.csproj` source discovery and Roslyn member analysis under `%LOCALAPPDATA%\CoverageReportGenerator\cache`.
-- Generate a single self-contained HTML report with embedded CSS and JavaScript.
-- Show Summary, Rankings, Coverage Tree, Members, Files, Source, and Raw dotCover method names.
-- Jump from a member or tree row to the matching source line.
-- Display only Covered, Uncovered, and No Data line states.
+## 機能
 
-## Current XML Scope
+- `.csproj` と dotCover DetailedXML を選択してHTMLレポートを生成します。
+- プロジェクト全体、フォルダ配下、単一ファイルを解析対象にできます。
+- フォルダを選択した場合は、配下のファイルを再帰的に対象にします。
+- セミコロン区切りのワイルドカードでファイルをフィルタリングできます。
+- `.csproj` のソース検出結果と Roslyn のメンバー解析結果を `%LOCALAPPDATA%\CoverageReportGenerator\cache` にキャッシュします。
+- CSS/JavaScriptを埋め込んだ単一HTMLファイルを生成します。
+- Summary、Rankings、Coverage Tree、Members、Files、Source、Raw dotCover method names を表示します。
+- メンバー名やTree行をクリックすると、対象ソース行へジャンプします。
+- 行状態は Covered、Uncovered、No Data の3種類のみを表示します。
 
-The first supported input is dotCover DetailedXML with this effective shape:
+## 対応XML
+
+最初に対応する入力は dotCover DetailedXML です。実質的に次のような構造を想定しています。
 
 ```text
 Root
@@ -29,9 +31,9 @@ Root
           Statement
 ```
 
-Element order is not significant. `FileIndices/File` and `Statement` are discovered from the XML tree.
+XML内の要素順には依存しません。`FileIndices/File` と `Statement` はXMLツリーから探索します。
 
-Required attributes:
+必須属性:
 
 - `File Index`
 - `File Name`
@@ -39,9 +41,9 @@ Required attributes:
 - `Statement Line`
 - `Statement Covered`
 
-`Assembly`, `Namespace`, `Type`, and `Method` are used when available. Missing optional hierarchy values are shown as `Unknown`.
+`Assembly`、`Namespace`、`Type`、`Method` は存在する場合に利用します。階層情報が欠けている場合は `Unknown` として扱います。
 
-## Development
+## 開発
 
 ```powershell
 dotnet restore
@@ -49,7 +51,7 @@ dotnet build
 dotnet test
 ```
 
-## Publish Single EXE
+## 単一EXEの作成
 
 ```powershell
 dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinForms.csproj `
@@ -62,31 +64,33 @@ dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinF
   /p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-The executable is written under:
+実行ファイルは次のフォルダに出力されます。
 
 ```text
 src/CoverageReportGenerator.WinForms/bin/Release/net8.0-windows/win-x64/publish/
 ```
 
-The published file is `CoverageReportGenerator.exe`.
+出力ファイル名は `CoverageReportGenerator.exe` です。
 
-## Bootstrap From One C# File
+## 単一C#ファイルからのBootstrap
 
-For users who cannot clone the repository, `bootstrap/CoverageReportGenerator.Bootstrap.cs` can download the public repository archive and publish the WinForms app. It does not build or include test projects.
+リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.cs` を用意しています。
 
-With .NET 10 SDK:
+このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。テストプロジェクトはビルド対象に含めません。
+
+.NET 10 SDK を使う場合:
 
 ```powershell
 dotnet run bootstrap\CoverageReportGenerator.Bootstrap.cs -- --output .\dist
 ```
 
-Optional local source mode:
+ローカルソースを指定する場合:
 
 ```powershell
 dotnet run bootstrap\CoverageReportGenerator.Bootstrap.cs -- --source C:\work\CoverageReportGenerator --output .\dist
 ```
 
-## Project Layout
+## プロジェクト構成
 
 ```text
 src/
@@ -98,6 +102,6 @@ bootstrap/
   CoverageReportGenerator.Bootstrap.cs
 ```
 
-## License
+## ライセンス
 
 MIT
