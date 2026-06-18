@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/CoverageReportGenerator.Core/CoverageReportGenerator.Core.csproj" />
+    <Project Path="src/CoverageReportGenerator.WinForms/CoverageReportGenerator.WinForms.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/CoverageReportGenerator.Core.Tests/CoverageReportGenerator.Core.Tests.csproj" />
+  </Folder>
+</Solution>

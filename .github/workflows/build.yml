@@ -1,0 +1,50 @@
+name: build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-test-publish:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --configuration Release --no-build --logger trx
+
+      - name: Publish single file
+        run: >
+          dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinForms.csproj
+          --configuration Release
+          --runtime win-x64
+          --self-contained true
+          /p:PublishSingleFile=true
+          /p:PublishTrimmed=false
+          /p:EnableCompressionInSingleFile=true
+          /p:IncludeNativeLibrariesForSelfExtract=true
+          /p:DebugType=None
+          /p:DebugSymbols=false
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: CoverageReportGenerator-win-x64
+          path: src\CoverageReportGenerator.WinForms\bin\Release\net8.0-windows\win-x64\publish\*
