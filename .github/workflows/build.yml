@@ -19,7 +19,7 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: 10.0.x
+          dotnet-version: 9.0.x
 
       - name: Restore
         run: dotnet restore
@@ -47,4 +47,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: CoverageReportGenerator-win-x64
-          path: src\CoverageReportGenerator.WinForms\bin\Release\net8.0-windows\win-x64\publish\*
+          path: src\CoverageReportGenerator.WinForms\bin\Release\net9.0-windows\win-x64\publish\*

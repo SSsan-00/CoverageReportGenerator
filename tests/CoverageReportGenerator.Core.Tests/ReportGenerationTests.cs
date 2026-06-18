@@ -14,7 +14,7 @@ public sealed class ReportGenerationTests
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Index.cshtml.cs", """
@@ -63,7 +63,7 @@ public sealed class ReportGenerationTests
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Admin\Edit.cshtml.cs", """
@@ -107,7 +107,7 @@ public sealed class ReportGenerationTests
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Index.cshtml.cs", """
