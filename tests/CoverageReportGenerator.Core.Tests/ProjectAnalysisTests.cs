@@ -7,6 +7,17 @@ namespace CoverageReportGenerator.Core.Tests;
 public sealed class ProjectAnalysisTests
 {
     [Fact]
+    public async Task Source_resolver_rejects_paths_that_are_not_csproj_files()
+    {
+        using var workspace = TestWorkspace.Create();
+        var solution = workspace.Write("Sample.sln", string.Empty);
+
+        var ex = await Assert.ThrowsAsync<ArgumentException>(() => new ProjectSourceResolver().ResolveAsync(solution));
+
+        Assert.Contains(".csproj", ex.Message);
+    }
+
+    [Fact]
     public async Task Source_resolver_reads_razor_project_files_and_applies_folder_scope_recursively()
     {
         using var workspace = TestWorkspace.Create();

@@ -6,7 +6,7 @@ namespace CoverageReportGenerator.WinForms;
 
 public sealed class MainForm : Form
 {
-    private readonly TextBox _projectPath = new();
+    private readonly TextBox _projectPath = new() { ReadOnly = true };
     private readonly TextBox _xmlPath = new();
     private readonly TextBox _scopePath = new();
     private readonly TextBox _includePatterns = new() { Text = "*.cs;*.cshtml" };
@@ -228,6 +228,12 @@ public sealed class MainForm : Form
 
     private async Task LoadProjectAsync()
     {
+        if (!Path.GetExtension(_projectPath.Text).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            Log("Select a .csproj file before loading the project.");
+            return;
+        }
+
         if (!File.Exists(_projectPath.Text))
         {
             Log("Project file was not found.");

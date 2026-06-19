@@ -3,6 +3,7 @@
 C# / WinForms で作成した、JetBrains dotCover DetailedXML からオフライン閲覧できるHTMLカバレッジレポートを生成するツールです。
 
 主な対象は Razor Pages プロジェクトです。`.csproj` を読み込み、Roslyn AST解析でソース上のメソッドや行範囲を把握したうえで、dotCover XMLのStatement情報をHTMLに変換します。
+プロジェクト解析は必ず `.csproj` ファイルの選択を起点に行います。
 
 ## 機能
 

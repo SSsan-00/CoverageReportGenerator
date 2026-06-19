@@ -67,6 +67,11 @@ public sealed class CoverageReportGenerationService
             throw new FileNotFoundException("Project file was not found.", options.ProjectPath);
         }
 
+        if (!Path.GetExtension(options.ProjectPath).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Project analysis requires a .csproj file.", nameof(options));
+        }
+
         if (!File.Exists(options.DotCoverXmlPath))
         {
             throw new FileNotFoundException("DotCover XML file was not found.", options.DotCoverXmlPath);

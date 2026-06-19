@@ -14,6 +14,16 @@ public sealed class ProjectSourceResolver
         cancellationToken.ThrowIfCancellationRequested();
 
         var fullProjectPath = PathUtilities.NormalizeFullPath(projectPath);
+        if (!Path.GetExtension(fullProjectPath).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException("Project analysis requires a .csproj file.", nameof(projectPath));
+        }
+
+        if (!File.Exists(fullProjectPath))
+        {
+            throw new FileNotFoundException("Project file was not found.", fullProjectPath);
+        }
+
         var projectRoot = Path.GetDirectoryName(fullProjectPath)
             ?? throw new InvalidOperationException("Project file must have a directory.");
         var projectName = Path.GetFileNameWithoutExtension(fullProjectPath);
