@@ -1,14 +1,36 @@
 using System.Globalization;
+using System.Text;
 using System.Xml.Linq;
+using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.DotCover;
 
 public sealed class DotCoverDetailedXmlParser
 {
+    static DotCoverDetailedXmlParser()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
     public DotCoverReport ParseFile(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
-        return Parse(File.ReadAllText(path));
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return ParseDocument(XDocument.Load(stream, LoadOptions.None));
+        }
+        catch (Exception ex) when (ex is System.Xml.XmlException or InvalidOperationException or NotSupportedException)
+        {
+            try
+            {
+                return Parse(SourceTextReader.ReadAllText(path));
+            }
+            catch (Exception fallbackEx) when (fallbackEx is System.Xml.XmlException or InvalidOperationException or DecoderFallbackException)
+            {
+                throw new DotCoverParseException("DotCover XML could not be parsed.", fallbackEx);
+            }
+        }
     }
 
     public DotCoverReport Parse(string xml)
@@ -25,6 +47,11 @@ public sealed class DotCoverDetailedXmlParser
             throw new DotCoverParseException("DotCover XML could not be parsed.", ex);
         }
 
+        return ParseDocument(document);
+    }
+
+    private static DotCoverReport ParseDocument(XDocument document)
+    {
         var root = document.Root ?? throw new DotCoverParseException("DotCover XML does not have a root element.");
         var fileIndices = root.DescendantsAndSelf()
             .Where(element => element.Name.LocalName == "FileIndices")

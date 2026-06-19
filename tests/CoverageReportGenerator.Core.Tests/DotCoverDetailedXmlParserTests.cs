@@ -1,4 +1,6 @@
 using CoverageReportGenerator.Core.DotCover;
+using CoverageReportGenerator.Core.Tests.TestSupport;
+using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
@@ -79,5 +81,64 @@ public sealed class DotCoverDetailedXmlParserTests
         Assert.Equal("Unknown Namespace", statement.NamespaceName);
         Assert.Equal("Unknown Type", statement.TypeName);
         Assert.Equal("Unknown Method", statement.MethodName);
+    }
+
+    [Fact]
+    public void ParseFile_respects_shift_jis_xml_encoding_declaration()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using var workspace = TestWorkspace.Create();
+        const string xml = """
+            <?xml version="1.0" encoding="shift_jis"?>
+            <Root>
+              <FileIndices><File Index="1" Name="Pages\一覧.cshtml.cs" /></FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="サンプル.Pages">
+                  <Type Name="一覧Model">
+                    <Method Name="OnGet():System.Void">
+                      <Statement FileIndex="1" Line="10" Covered="True" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+        var path = workspace.WriteBytes("dotcover.xml", Encoding.GetEncoding("shift_jis").GetBytes(xml.ReplaceLineEndings(Environment.NewLine)));
+
+        var report = new DotCoverDetailedXmlParser().ParseFile(path);
+
+        Assert.Equal(@"Pages\一覧.cshtml.cs", Assert.Single(report.Files).Name);
+        var statement = Assert.Single(report.Statements);
+        Assert.Equal("サンプル.Pages", statement.NamespaceName);
+        Assert.Equal("一覧Model", statement.TypeName);
+    }
+
+    [Fact]
+    public void ParseFile_falls_back_to_shift_jis_when_xml_has_no_encoding_declaration()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using var workspace = TestWorkspace.Create();
+        const string xml = """
+            <Root>
+              <FileIndices><File Index="1" Name="Pages\詳細.cshtml.cs" /></FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="サンプル.Pages">
+                  <Type Name="詳細Model">
+                    <Method Name="OnGet():System.Void">
+                      <Statement FileIndex="1" Line="10" Covered="True" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+        var path = workspace.WriteBytes("dotcover-no-declaration.xml", Encoding.GetEncoding("shift_jis").GetBytes(xml.ReplaceLineEndings(Environment.NewLine)));
+
+        var report = new DotCoverDetailedXmlParser().ParseFile(path);
+
+        Assert.Equal(@"Pages\詳細.cshtml.cs", Assert.Single(report.Files).Name);
+        var statement = Assert.Single(report.Statements);
+        Assert.Equal("サンプル.Pages", statement.NamespaceName);
+        Assert.Equal("詳細Model", statement.TypeName);
     }
 }

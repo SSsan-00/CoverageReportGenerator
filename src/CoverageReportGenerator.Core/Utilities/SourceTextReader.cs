@@ -17,6 +17,11 @@ internal static class SourceTextReader
         return Decode(bytes);
     }
 
+    public static string ReadAllText(string path)
+    {
+        return Decode(File.ReadAllBytes(path));
+    }
+
     public static string[] ReadAllLines(string path)
     {
         return SplitLines(Decode(File.ReadAllBytes(path)));
