@@ -72,30 +72,22 @@ src/CoverageReportGenerator.WinForms/bin/Release/net9.0-windows/win-x64/publish/
 
 出力ファイル名は `CoverageReportGenerator.exe` です。
 
-## 単一C#ファイルからのBootstrap
+## 単一PowerShellファイルからのBootstrap
 
-リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.cs` を用意しています。
+リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.ps1` を用意しています。
 
 このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。テストプロジェクトはビルド対象に含めません。
 
-.NET 9 SDK を使う場合は、一時フォルダにコンソールプロジェクトを作ってBootstrapソースを実行します。
+.NET 9 SDK が入っていれば、コンソールプロジェクトを作らずに実行できます。
 
 ```powershell
-$runner = Join-Path $env:TEMP "CoverageReportGenerator.Bootstrap.Runner"
-New-Item -ItemType Directory -Force -Path $runner | Out-Null
-dotnet new console --framework net9.0 --output $runner --force
-Copy-Item .\bootstrap\CoverageReportGenerator.Bootstrap.cs (Join-Path $runner "Program.cs") -Force
-dotnet run --project $runner -- --output .\dist
+.\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Output .\dist
 ```
 
 ローカルソースを指定する場合:
 
 ```powershell
-$runner = Join-Path $env:TEMP "CoverageReportGenerator.Bootstrap.Runner"
-New-Item -ItemType Directory -Force -Path $runner | Out-Null
-dotnet new console --framework net9.0 --output $runner --force
-Copy-Item .\bootstrap\CoverageReportGenerator.Bootstrap.cs (Join-Path $runner "Program.cs") -Force
-dotnet run --project $runner -- --source C:\work\CoverageReportGenerator --output .\dist
+.\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Source C:\work\CoverageReportGenerator -Output .\dist
 ```
 
 ## プロジェクト構成
@@ -107,6 +99,7 @@ src/
 tests/
   CoverageReportGenerator.Core.Tests/
 bootstrap/
+  CoverageReportGenerator.Bootstrap.ps1
   CoverageReportGenerator.Bootstrap.cs
 ```
 
