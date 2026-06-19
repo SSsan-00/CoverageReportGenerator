@@ -46,12 +46,31 @@ internal static class SourceTextReader
 
         try
         {
-            return StrictUtf8.GetString(bytes);
+            var utf8Text = StrictUtf8.GetString(bytes);
+            if (!ContainsSuspiciousControlCharacters(utf8Text))
+            {
+                return utf8Text;
+            }
+
+            var cp932Text = Encoding.GetEncoding(932).GetString(bytes);
+            return CountSuspiciousControlCharacters(cp932Text) < CountSuspiciousControlCharacters(utf8Text)
+                ? cp932Text
+                : utf8Text;
         }
         catch (DecoderFallbackException)
         {
             return Encoding.GetEncoding(932).GetString(bytes);
         }
+    }
+
+    private static bool ContainsSuspiciousControlCharacters(string text)
+    {
+        return CountSuspiciousControlCharacters(text) > 0;
+    }
+
+    private static int CountSuspiciousControlCharacters(string text)
+    {
+        return text.Count(ch => ch is >= '\u0080' and <= '\u009F');
     }
 
     private static string[] SplitLines(string text)

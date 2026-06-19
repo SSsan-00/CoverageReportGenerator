@@ -1,6 +1,7 @@
 using CoverageReportGenerator.Core.Projects;
 using CoverageReportGenerator.Core.Reports;
 using CoverageReportGenerator.Core.Tests.TestSupport;
+using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
@@ -98,6 +99,26 @@ public sealed class ProjectAnalysisTests
     }
 
     [Fact]
+    public async Task Roslyn_member_parser_reads_shift_jis_source_files()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        using var workspace = TestWorkspace.Create();
+        var source = """
+            public class IndexModel
+            {
+                public void 日本語メソッド()
+                {
+                }
+            }
+            """;
+        var path = workspace.WriteBytes(@"Pages\Index.cshtml.cs", Encoding.GetEncoding(932).GetBytes(source.ReplaceLineEndings(Environment.NewLine)));
+
+        var members = await new RoslynSourceMemberParser().ParseFileAsync(path);
+
+        Assert.Contains(members, member => member.Kind == SourceMemberKind.Method && member.Name == "日本語メソッド");
+    }
+
+    [Fact]
     public async Task Project_cache_reuses_unchanged_member_analysis_and_rebuilds_changed_files()
     {
         using var workspace = TestWorkspace.Create();
@@ -121,5 +142,36 @@ public sealed class ProjectAnalysisTests
 
         Assert.Equal(ProjectCacheStatus.Updated, third.CacheStatus);
         Assert.Contains(third.Members, member => member.Name == "Run");
+    }
+
+    [Fact]
+    public async Task Project_cache_ignores_entries_from_previous_schema_versions()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        var source = workspace.Write(@"Pages\Index.cshtml.cs", "public class IndexModel { public void OnGet() {} }");
+        var cacheDir = workspace.CreateDirectory("cache");
+        var resolver = new ProjectSourceResolver();
+        var cache = new ProjectCacheService(cacheDir);
+        var snapshot = await resolver.ResolveAsync(project);
+        var oldEntry = new ProjectCacheEntry(
+            1,
+            snapshot.ProjectPath,
+            snapshot.ProjectName,
+            snapshot.ProjectRoot,
+            ProjectCacheService.Metadata(project),
+            snapshot.SourceFiles.Select(file => new CachedSourceFile(file.FullPath, file.RelativePath, file.Extension, ProjectCacheService.Metadata(file.FullPath))).ToList(),
+            [new SourceMember(source, @"Pages\Index.cshtml.cs", SourceMemberKind.Method, "IndexModel", "BrokenCachedName", "BrokenCachedName", "BrokenCachedName()", 1, 1)]);
+        await cache.SaveAsync(oldEntry);
+
+        var analysis = await new ProjectAnalyzer(resolver, new RoslynSourceMemberParser(), cache).AnalyzeAsync(project);
+
+        Assert.Equal(ProjectCacheStatus.Created, analysis.CacheStatus);
+        Assert.Contains(analysis.Members, member => member.Name == "OnGet");
+        Assert.DoesNotContain(analysis.Members, member => member.Name == "BrokenCachedName");
     }
 }

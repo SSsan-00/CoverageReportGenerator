@@ -7,7 +7,7 @@ namespace CoverageReportGenerator.Core.Projects;
 
 public sealed class ProjectCacheService
 {
-    private const int SchemaVersion = 1;
+    private const int SchemaVersion = 2;
     private readonly string _cacheDirectory;
     private readonly JsonSerializerOptions _serializerOptions = new(JsonSerializerDefaults.General)
     {
