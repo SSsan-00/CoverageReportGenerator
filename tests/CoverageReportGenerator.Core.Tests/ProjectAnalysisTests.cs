@@ -48,6 +48,29 @@ public sealed class ProjectAnalysisTests
     }
 
     [Fact]
+    public async Task Source_resolver_does_not_stop_directory_scanning_when_compile_include_exists()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <ItemGroup>
+                <Compile Include="Linked\OnlyExplicit.cs" />
+              </ItemGroup>
+            </Project>
+            """);
+        workspace.Write(@"Linked\OnlyExplicit.cs", "public class OnlyExplicit { }");
+        workspace.Write(@"Pages\Index.cshtml", "@page");
+        workspace.Write(@"Pages\Index.cshtml.cs", "public class IndexModel { public void OnGet() {} }");
+
+        var snapshot = await new ProjectSourceResolver().ResolveAsync(project);
+
+        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Linked\OnlyExplicit.cs");
+        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Pages\Index.cshtml");
+        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Pages\Index.cshtml.cs");
+    }
+
+    [Fact]
     public async Task Roslyn_member_parser_finds_methods_properties_local_functions_and_lambdas()
     {
         using var workspace = TestWorkspace.Create();

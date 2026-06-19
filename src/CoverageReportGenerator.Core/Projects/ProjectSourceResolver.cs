@@ -46,17 +46,17 @@ public sealed class ProjectSourceResolver
             // Fall back to SDK-style directory scanning when the project XML cannot be inspected.
         }
 
-        var compileIncludes = document?
+        var explicitIncludes = document?
             .Descendants()
-            .Where(element => element.Name.LocalName == "Compile")
+            .Where(element => IsSourceItem(element.Name.LocalName))
             .Select(element => element.Attribute("Include")?.Value)
             .Where(value => !string.IsNullOrWhiteSpace(value))
             .Cast<string>()
             .ToList() ?? [];
 
-        var paths = compileIncludes.Count > 0
-            ? ResolveCompileIncludes(projectRoot, compileIncludes)
-            : SourcePatterns.SelectMany(pattern => Directory.EnumerateFiles(projectRoot, pattern, SearchOption.AllDirectories));
+        var paths = SourcePatterns
+            .SelectMany(pattern => Directory.EnumerateFiles(projectRoot, pattern, SearchOption.AllDirectories))
+            .Concat(ResolveIncludes(projectRoot, explicitIncludes));
 
         return paths
             .Select(PathUtilities.NormalizeFullPath)
@@ -66,7 +66,12 @@ public sealed class ProjectSourceResolver
             .Select(path => new SourceFile(path, PathUtilities.GetRelativePath(projectRoot, path), Path.GetExtension(path)));
     }
 
-    private static IEnumerable<string> ResolveCompileIncludes(string projectRoot, IEnumerable<string> includes)
+    private static bool IsSourceItem(string itemName)
+    {
+        return itemName is "Compile" or "Content" or "None" or "Page";
+    }
+
+    private static IEnumerable<string> ResolveIncludes(string projectRoot, IEnumerable<string> includes)
     {
         foreach (var include in includes)
         {
