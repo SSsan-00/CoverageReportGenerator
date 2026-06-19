@@ -73,7 +73,7 @@ public sealed class HtmlReportRenderer
     private static void RenderTabs(StringBuilder html, CoverageReport report)
     {
         html.AppendLine("<nav class=\"tabs\">");
-        foreach (var (id, label) in new[] { ("summary", "Summary"), ("rankings", "Rankings"), ("tree", "Coverage Tree"), ("members", "Members"), ("files", "Files"), ("source", "Source") })
+        foreach (var (id, label) in new[] { ("summary", "Summary"), ("rankings", "Rankings"), ("members", "Members"), ("files", "Files"), ("source", "Source") })
         {
             html.Append("<button type=\"button\" class=\"tab-button\" data-tab=\"").Append(id).Append("\">").Append(label).AppendLine("</button>");
         }
@@ -86,10 +86,6 @@ public sealed class HtmlReportRenderer
 
         html.AppendLine("<section id=\"tab-rankings\" class=\"tab-panel\">");
         RenderRankings(html, report);
-        html.AppendLine("</section>");
-
-        html.AppendLine("<section id=\"tab-tree\" class=\"tab-panel\">");
-        RenderTree(html, report);
         html.AppendLine("</section>");
 
         html.AppendLine("<section id=\"tab-members\" class=\"tab-panel\">");
@@ -167,29 +163,6 @@ public sealed class HtmlReportRenderer
         }
 
         html.AppendLine("</tbody></table></section>");
-    }
-
-    private static void RenderTree(StringBuilder html, CoverageReport report)
-    {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Coverage Tree</h2></div>");
-        html.AppendLine("<table class=\"tree-table\"><thead><tr><th>Name</th><th>Kind</th><th>Coverage</th><th>Statements</th></tr></thead><tbody>");
-        foreach (var item in report.Tree.Flatten())
-        {
-            html.Append("<tr data-node=\"").Append(E(item.Id)).Append("\" data-parent=\"").Append(E(item.ParentId ?? string.Empty)).Append("\" class=\"depth-").Append(item.Depth).Append("\"><td>");
-            html.Append("<span class=\"indent\" style=\"--depth:").Append(item.Depth).Append("\"></span>");
-            if (item.FileId.HasValue && item.StartLine.HasValue)
-            {
-                LinkToSource(html, item.FileId.Value, item.StartLine.Value, item.Name);
-            }
-            else
-            {
-                html.Append(E(item.Name));
-            }
-
-            html.Append("</td><td>").Append(item.Kind).Append("</td><td>").Append(Percent(item.Summary)).Append("</td><td>").Append(Statements(item.Summary)).AppendLine("</td></tr>");
-        }
-
-        html.AppendLine("</tbody></table>");
     }
 
     private static void RenderMembers(StringBuilder html, CoverageReport report)
@@ -327,7 +300,6 @@ public sealed class HtmlReportRenderer
         th { background:#f3f6f9; color:#374151; font-weight:600; }
         a { color:var(--accent); text-decoration:none; }
         a:hover { text-decoration:underline; }
-        .indent { display:inline-block; width:calc(var(--depth) * 18px); }
         details.source-file { margin:0 0 12px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }
         details.source-file > summary { cursor:pointer; padding:10px 12px; background:#f3f6f9; font-weight:600; }
         .source-table { border:0; font-family:Consolas, 'Cascadia Mono', monospace; }

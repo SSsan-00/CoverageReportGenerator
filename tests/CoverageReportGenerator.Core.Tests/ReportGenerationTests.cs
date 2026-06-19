@@ -103,7 +103,7 @@ public sealed class ReportGenerationTests
     }
 
     [Fact]
-    public async Task Html_renderer_outputs_tree_rankings_source_anchors_and_no_partial_text()
+    public async Task Html_renderer_outputs_rankings_source_anchors_and_no_removed_tabs()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
@@ -135,12 +135,13 @@ public sealed class ReportGenerationTests
 
         var html = new HtmlReportRenderer().Render(report);
 
-        Assert.Contains("Coverage Tree", html);
         Assert.Contains("Lowest Members", html);
         Assert.Contains("src-file-1-line-6", html);
         Assert.Contains("jumpToSource(1, 4)", html);
         Assert.DoesNotContain("Partial", html, StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("Raw", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Coverage Tree", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("tab-tree", html, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
