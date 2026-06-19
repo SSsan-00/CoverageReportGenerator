@@ -154,7 +154,7 @@ public sealed class CoverageReportBuilder
         var statementByLine = statements
             .GroupBy(statement => statement.Line)
             .ToDictionary(group => group.Key, group => group.ToList());
-        var sourceLines = File.ReadAllLines(fullPath);
+        var sourceLines = SourceTextReader.ReadAllLines(fullPath);
         var lines = new List<LineCoverageReport>(sourceLines.Length);
         for (var i = 0; i < sourceLines.Length; i++)
         {

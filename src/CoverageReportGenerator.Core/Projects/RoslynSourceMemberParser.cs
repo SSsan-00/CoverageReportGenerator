@@ -15,7 +15,7 @@ public sealed class RoslynSourceMemberParser
             return [];
         }
 
-        var text = await File.ReadAllTextAsync(filePath, cancellationToken);
+        var text = await SourceTextReader.ReadAllTextAsync(filePath, cancellationToken);
         var tree = CSharpSyntaxTree.ParseText(text, cancellationToken: cancellationToken);
         var root = await tree.GetRootAsync(cancellationToken);
         var normalizedPath = PathUtilities.NormalizeFullPath(filePath);

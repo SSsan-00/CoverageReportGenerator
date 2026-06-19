@@ -3,6 +3,7 @@ using CoverageReportGenerator.Core.Projects;
 using CoverageReportGenerator.Core.Rendering;
 using CoverageReportGenerator.Core.Reports;
 using CoverageReportGenerator.Core.Tests.TestSupport;
+using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
@@ -139,6 +140,46 @@ public sealed class ReportGenerationTests
         Assert.Contains("src-file-1-line-6", html);
         Assert.Contains("jumpToSource(1, 4)", html);
         Assert.DoesNotContain("Partial", html, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Raw", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task Html_renderer_preserves_japanese_text_from_cp932_source_files()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        var source = """
+            namespace Sample.Pages;
+            public class IndexModel
+            {
+                public void OnGet()
+                {
+                    // 日本語コメント
+                }
+            }
+            """;
+        workspace.WriteBytes(@"Pages\Index.cshtml.cs", Encoding.GetEncoding(932).GetBytes(source.ReplaceLineEndings(Environment.NewLine)));
+        var xml = """
+            <Root>
+              <FileIndices><File Index="1" Name="Pages\Index.cshtml.cs" /></FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="Sample.Pages">
+                  <Type Name="IndexModel"><Method Name="OnGet():System.Void"><Statement FileIndex="1" Line="6" Covered="True" /></Method></Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+        var html = new HtmlReportRenderer().Render(report);
+
+        Assert.Contains("日本語コメント", html);
     }
 
     private static async Task<CoverageReport> BuildReportAsync(

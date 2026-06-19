@@ -29,6 +29,19 @@ internal sealed class TestWorkspace : IDisposable
         return path;
     }
 
+    public string WriteBytes(string relativePath, byte[] contents)
+    {
+        var path = PathOf(relativePath);
+        var directory = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(directory))
+        {
+            Directory.CreateDirectory(directory);
+        }
+
+        File.WriteAllBytes(path, contents);
+        return path;
+    }
+
     public string CreateDirectory(string relativePath)
     {
         var path = PathOf(relativePath);

@@ -7,6 +7,8 @@ namespace CoverageReportGenerator.Core.Rendering;
 
 public sealed class HtmlReportRenderer
 {
+    private static readonly UTF8Encoding HtmlEncoding = new(encoderShouldEmitUTF8Identifier: true);
+
     public void RenderToFile(CoverageReport report, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -18,7 +20,7 @@ public sealed class HtmlReportRenderer
             Directory.CreateDirectory(directory);
         }
 
-        File.WriteAllText(outputPath, Render(report), Encoding.UTF8);
+        File.WriteAllText(outputPath, Render(report), HtmlEncoding);
     }
 
     public string Render(CoverageReport report)
@@ -71,7 +73,7 @@ public sealed class HtmlReportRenderer
     private static void RenderTabs(StringBuilder html, CoverageReport report)
     {
         html.AppendLine("<nav class=\"tabs\">");
-        foreach (var (id, label) in new[] { ("summary", "Summary"), ("rankings", "Rankings"), ("tree", "Coverage Tree"), ("members", "Members"), ("files", "Files"), ("source", "Source"), ("raw", "Raw") })
+        foreach (var (id, label) in new[] { ("summary", "Summary"), ("rankings", "Rankings"), ("tree", "Coverage Tree"), ("members", "Members"), ("files", "Files"), ("source", "Source") })
         {
             html.Append("<button type=\"button\" class=\"tab-button\" data-tab=\"").Append(id).Append("\">").Append(label).AppendLine("</button>");
         }
@@ -102,9 +104,6 @@ public sealed class HtmlReportRenderer
         RenderSource(html, report);
         html.AppendLine("</section>");
 
-        html.AppendLine("<section id=\"tab-raw\" class=\"tab-panel\">");
-        RenderRaw(html, report);
-        html.AppendLine("</section>");
         html.AppendLine("</main>");
     }
 
@@ -254,20 +253,6 @@ public sealed class HtmlReportRenderer
 
             html.AppendLine("</tbody></table></details>");
         }
-    }
-
-    private static void RenderRaw(StringBuilder html, CoverageReport report)
-    {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Raw DotCover Method Names</h2></div>");
-        html.AppendLine("<table><thead><tr><th>Member</th><th>Raw names</th></tr></thead><tbody>");
-        foreach (var member in report.Members.Where(member => member.RawDotCoverMethodNames.Count > 0))
-        {
-            html.Append("<tr><td>");
-            LinkToSource(html, member.FileId, member.StartLine, member.DisplayName);
-            html.Append("</td><td>").Append(E(string.Join(", ", member.RawDotCoverMethodNames))).AppendLine("</td></tr>");
-        }
-
-        html.AppendLine("</tbody></table>");
     }
 
     private static void Row(StringBuilder html, string key, string value)
