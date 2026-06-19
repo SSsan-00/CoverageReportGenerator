@@ -79,6 +79,7 @@ src/CoverageReportGenerator.WinForms/bin/Release/net9.0-windows/win-x64/publish/
 リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.ps1` を用意しています。
 
 このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。テストプロジェクトはビルド対象に含めません。
+出力先には `CoverageReportGenerator.exe` と、テストコードやビルド生成物を除外した `source/` フォルダを作成します。
 
 .NET 9 SDK が入っていれば、コンソールプロジェクトを作らずに実行できます。
 

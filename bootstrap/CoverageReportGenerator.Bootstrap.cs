@@ -35,11 +35,15 @@ try
         "-o", options.OutputDirectory
     ]);
 
-    Console.WriteLine($"CoverageReportGenerator を出力しました: {Path.GetFullPath(options.OutputDirectory)}");
+    var sourceOutputPath = Path.Combine(options.OutputDirectory, "source");
+    CopySourceTree(sourceRoot, sourceOutputPath, options.OutputDirectory);
+
+    Console.WriteLine($"CoverageReportGenerator was published to: {Path.GetFullPath(options.OutputDirectory)}");
+    Console.WriteLine($"Source files were copied to: {Path.GetFullPath(sourceOutputPath)}");
 }
 finally
 {
-    if (!options.KeepTemp && Directory.Exists(workRoot))
+    if (!options.KeepTemp && Directory.Exists(workRoot) && IsChildPath(workRoot, Path.GetTempPath()))
     {
         try
         {
@@ -66,6 +70,71 @@ static async Task<string> DownloadAndExtractAsync(string archiveUrl, string work
     ZipFile.ExtractToDirectory(zipPath, extractPath);
     var roots = Directory.GetDirectories(extractPath);
     return roots.Length == 1 ? roots[0] : extractPath;
+}
+
+static void CopySourceTree(string sourceRoot, string targetRoot, string outputRoot)
+{
+    var sourceFullPath = Path.GetFullPath(sourceRoot);
+    var targetFullPath = Path.GetFullPath(targetRoot);
+    var outputFullPath = Path.GetFullPath(outputRoot);
+    if (!IsChildPath(targetFullPath, outputFullPath))
+    {
+        throw new InvalidOperationException($"Source target must be inside the output directory: {targetFullPath}");
+    }
+
+    if (Directory.Exists(targetFullPath))
+    {
+        Directory.Delete(targetFullPath, recursive: true);
+    }
+
+    Directory.CreateDirectory(targetFullPath);
+    var excludedDirectoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "tests",
+        ".git",
+        ".vs",
+        "bin",
+        "obj",
+        "artifacts"
+    };
+
+    CopyDirectoryContent(sourceFullPath, targetFullPath);
+
+    void CopyDirectoryContent(string currentSource, string currentTarget)
+    {
+        foreach (var directory in Directory.EnumerateDirectories(currentSource))
+        {
+            var directoryInfo = new DirectoryInfo(directory);
+            var directoryFullPath = Path.GetFullPath(directory);
+            if (excludedDirectoryNames.Contains(directoryInfo.Name) ||
+                string.Equals(directoryFullPath, outputFullPath, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(directoryFullPath, targetFullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var nextTarget = Path.Combine(currentTarget, directoryInfo.Name);
+            Directory.CreateDirectory(nextTarget);
+            CopyDirectoryContent(directoryFullPath, nextTarget);
+        }
+
+        foreach (var file in Directory.EnumerateFiles(currentSource))
+        {
+            File.Copy(file, Path.Combine(currentTarget, Path.GetFileName(file)), overwrite: true);
+        }
+    }
+}
+
+static bool IsChildPath(string childPath, string parentPath)
+{
+    var childFullPath = Path.GetFullPath(childPath);
+    var parentFullPath = Path.GetFullPath(parentPath);
+    if (!parentFullPath.EndsWith(Path.DirectorySeparatorChar))
+    {
+        parentFullPath += Path.DirectorySeparatorChar;
+    }
+
+    return childFullPath.StartsWith(parentFullPath, StringComparison.OrdinalIgnoreCase);
 }
 
 static void Run(string fileName, IReadOnlyList<string> arguments)

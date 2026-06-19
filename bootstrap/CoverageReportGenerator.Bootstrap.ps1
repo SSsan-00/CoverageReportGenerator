@@ -45,6 +45,73 @@ function Get-SourceRoot {
     return $extractPath
 }
 
+function Test-IsChildPath {
+    param(
+        [string]$ChildPath,
+        [string]$ParentPath
+    )
+
+    $childFullPath = [System.IO.Path]::GetFullPath($ChildPath)
+    $parentFullPath = [System.IO.Path]::GetFullPath($ParentPath)
+    if (-not $parentFullPath.EndsWith([System.IO.Path]::DirectorySeparatorChar)) {
+        $parentFullPath += [System.IO.Path]::DirectorySeparatorChar
+    }
+
+    return $childFullPath.StartsWith($parentFullPath, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Copy-SourceTree {
+    param(
+        [string]$SourceRoot,
+        [string]$TargetRoot,
+        [string]$OutputRoot
+    )
+
+    $sourceFullPath = (Resolve-Path -LiteralPath $SourceRoot).Path
+    $targetFullPath = [System.IO.Path]::GetFullPath($TargetRoot)
+    $outputFullPath = [System.IO.Path]::GetFullPath($OutputRoot)
+    if (-not (Test-IsChildPath -ChildPath $targetFullPath -ParentPath $outputFullPath)) {
+        throw "Source target must be inside the output directory: $targetFullPath"
+    }
+
+    if (Test-Path -LiteralPath $targetFullPath) {
+        Remove-Item -LiteralPath $targetFullPath -Recurse -Force
+    }
+
+    $excludedDirectoryNames = @("tests", ".git", ".vs", "bin", "obj", "artifacts")
+    New-Item -ItemType Directory -Force -Path $targetFullPath | Out-Null
+
+    function Copy-DirectoryContent {
+        param(
+            [string]$CurrentSource,
+            [string]$CurrentTarget
+        )
+
+        foreach ($item in Get-ChildItem -LiteralPath $CurrentSource -Force) {
+            if ($item.PSIsContainer) {
+                $itemFullPath = [System.IO.Path]::GetFullPath($item.FullName)
+                if ($excludedDirectoryNames -contains $item.Name) {
+                    continue
+                }
+
+                if ($itemFullPath.Equals($outputFullPath, [System.StringComparison]::OrdinalIgnoreCase) -or
+                    $itemFullPath.Equals($targetFullPath, [System.StringComparison]::OrdinalIgnoreCase)) {
+                    continue
+                }
+
+                $nextTarget = Join-Path $CurrentTarget $item.Name
+                New-Item -ItemType Directory -Force -Path $nextTarget | Out-Null
+                Copy-DirectoryContent -CurrentSource $item.FullName -CurrentTarget $nextTarget
+                continue
+            }
+
+            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $CurrentTarget $item.Name) -Force
+        }
+    }
+
+    Copy-DirectoryContent -CurrentSource $sourceFullPath -CurrentTarget $targetFullPath
+}
+
 try {
     $sourceRoot = Get-SourceRoot
     $projectPath = Join-Path $sourceRoot "src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinForms.csproj"
@@ -70,7 +137,11 @@ try {
         "-o", $outputPath
     )
 
+    $sourceOutputPath = Join-Path $outputPath "source"
+    Copy-SourceTree -SourceRoot $sourceRoot -TargetRoot $sourceOutputPath -OutputRoot $outputPath
+
     Write-Host "CoverageReportGenerator was published to: $outputPath"
+    Write-Host "Source files were copied to: $sourceOutputPath"
 }
 finally {
     if (-not $KeepTemp -and (Test-Path -LiteralPath $workRoot)) {
