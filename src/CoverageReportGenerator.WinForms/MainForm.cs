@@ -1,11 +1,13 @@
 using System.Diagnostics;
 using CoverageReportGenerator.Core.Projects;
 using CoverageReportGenerator.Core.Reports;
+using CoverageReportGenerator.Core.Settings;
 
 namespace CoverageReportGenerator.WinForms;
 
 public sealed class MainForm : Form
 {
+    private readonly AppSettingsService _settingsService = new();
     private readonly TextBox _projectPath = new() { ReadOnly = true };
     private readonly TextBox _xmlPath = new();
     private readonly TextBox _scopePath = new();
@@ -22,6 +24,7 @@ public sealed class MainForm : Form
     private readonly Label _previewStatus = new() { AutoSize = true, Text = "Target Preview" };
     private readonly DataGridView _previewGrid = new();
     private readonly RichTextBox _log = new() { ReadOnly = true, BorderStyle = BorderStyle.None };
+    private readonly Button _resetButton = new() { Text = "Reset", Height = 36 };
     private readonly Button _generateButton = new() { Text = "Generate Report", Height = 36 };
 
     private ProjectAnalysis? _analysis;
@@ -35,6 +38,9 @@ public sealed class MainForm : Form
         StartPosition = FormStartPosition.CenterScreen;
 
         BuildLayout();
+        ApplySettings(_settingsService.Load());
+        Shown += async (_, _) => await LoadSavedProjectIfAvailableAsync();
+        FormClosing += (_, _) => SaveCurrentSettings();
     }
 
     private void BuildLayout()
@@ -87,7 +93,8 @@ public sealed class MainForm : Form
         options.Controls.Add(_overwriteExisting);
         panel.Controls.Add(new Label(), 0, panel.RowCount);
         panel.Controls.Add(options, 1, panel.RowCount);
-        panel.SetColumnSpan(options, 2);
+        _resetButton.Click += (_, _) => ResetToDefaultSettings();
+        panel.Controls.Add(_resetButton, 2, panel.RowCount);
         _generateButton.Click += async (_, _) => await GenerateAsync();
         panel.Controls.Add(_generateButton, 3, panel.RowCount++);
 
@@ -260,6 +267,14 @@ public sealed class MainForm : Form
         }
     }
 
+    private async Task LoadSavedProjectIfAvailableAsync()
+    {
+        if (File.Exists(_projectPath.Text) && Path.GetExtension(_projectPath.Text).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
+        {
+            await LoadProjectAsync();
+        }
+    }
+
     private Task BrowseXml()
     {
         using var dialog = new OpenFileDialog { Filter = "XML files (*.xml)|*.xml|All files (*.*)|*.*", Title = "Select DotCover XML" };
@@ -311,6 +326,7 @@ public sealed class MainForm : Form
         try
         {
             SetBusy(true);
+            SaveCurrentSettings();
             var service = new CoverageReportGenerationService();
             var result = await service.GenerateAsync(new CoverageReportGenerationOptions(
                 _projectPath.Text,
@@ -397,5 +413,67 @@ public sealed class MainForm : Form
         _log.AppendText($"{DateTime.Now:HH:mm:ss} {message}{Environment.NewLine}");
         _log.SelectionStart = _log.TextLength;
         _log.ScrollToCaret();
+    }
+
+    private void ApplySettings(AppSettings settings)
+    {
+        _projectPath.Text = settings.ProjectPath;
+        _xmlPath.Text = settings.DotCoverXmlPath;
+        _scopePath.Text = settings.ScopePath;
+        _includePatterns.Text = settings.IncludePatterns;
+        _excludePatterns.Text = settings.ExcludePatterns;
+        _outputDirectory.Text = settings.OutputDirectory;
+        _reportTitle.Text = settings.ReportTitle;
+        _openAfterGeneration.Checked = settings.OpenAfterGeneration;
+        _overwriteExisting.Checked = settings.OverwriteExisting;
+        _projectScope.Checked = settings.ScopeType == CoverageScopeType.Project;
+        _folderScope.Checked = settings.ScopeType == CoverageScopeType.Folder;
+        _fileScope.Checked = settings.ScopeType == CoverageScopeType.File;
+    }
+
+    private AppSettings CaptureSettings()
+    {
+        return new AppSettings(
+            _projectPath.Text,
+            _xmlPath.Text,
+            _scopePath.Text,
+            _includePatterns.Text,
+            _excludePatterns.Text,
+            _outputDirectory.Text,
+            _reportTitle.Text,
+            CurrentScopeType(),
+            _openAfterGeneration.Checked,
+            _overwriteExisting.Checked);
+    }
+
+    private void SaveCurrentSettings()
+    {
+        try
+        {
+            _settingsService.Save(CaptureSettings());
+        }
+        catch (Exception ex)
+        {
+            Log($"Settings were not saved: {ex.Message}");
+        }
+    }
+
+    private void ResetToDefaultSettings()
+    {
+        try
+        {
+            _settingsService.Reset();
+        }
+        catch (Exception ex)
+        {
+            Log($"Settings were not reset: {ex.Message}");
+        }
+
+        _analysis = null;
+        ApplySettings(AppSettings.Defaults);
+        _projectStatus.Text = "Project: not loaded";
+        _previewStatus.Text = "Target Preview";
+        _previewGrid.Rows.Clear();
+        _log.Clear();
     }
 }
