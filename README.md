@@ -49,6 +49,8 @@ XML内の要素順には依存しません。`FileIndices/File` と `Statement` 
 
 ## 開発
 
+テストフレームワークは MSTest を使用します。
+
 ```powershell
 dotnet restore
 dotnet build
@@ -71,7 +73,7 @@ dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinF
 実行ファイルは次のフォルダに出力されます。
 
 ```text
-src/CoverageReportGenerator.WinForms/bin/Release/net9.0-windows/win-x64/publish/
+src/CoverageReportGenerator.WinForms/bin/Release/net8.0-windows/win-x64/publish/
 ```
 
 出力ファイル名は `CoverageReportGenerator.exe` です。
@@ -80,10 +82,10 @@ src/CoverageReportGenerator.WinForms/bin/Release/net9.0-windows/win-x64/publish/
 
 リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.ps1` を用意しています。
 
-このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。テストプロジェクトはビルド対象に含めません。
-出力先には `CoverageReportGenerator.exe` と、テストコードやビルド生成物を除外した `source/` フォルダを作成します。
+このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。
+出力先には `CoverageReportGenerator.exe` と、テストコードを含む `source/` フォルダを作成します。ビルド生成物やGitメタデータは除外します。
 
-.NET 9 SDK が入っていれば、コンソールプロジェクトを作らずに実行できます。
+.NET 8 SDK が入っていれば、コンソールプロジェクトを作らずに実行できます。
 
 ```powershell
 .\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Output .\dist

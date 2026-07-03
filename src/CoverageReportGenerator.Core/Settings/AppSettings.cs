@@ -2,6 +2,9 @@ using CoverageReportGenerator.Core.Reports;
 
 namespace CoverageReportGenerator.Core.Settings;
 
+/// <summary>
+/// WinForms画面で前回入力した内容。
+/// </summary>
 public sealed record AppSettings(
     string ProjectPath,
     string DotCoverXmlPath,
@@ -14,6 +17,9 @@ public sealed record AppSettings(
     bool OpenAfterGeneration,
     bool OverwriteExisting)
 {
+    /// <summary>
+    /// 初回起動時とReset時に使う既定値。
+    /// </summary>
     public static AppSettings Defaults { get; } = new(
         ProjectPath: string.Empty,
         DotCoverXmlPath: string.Empty,

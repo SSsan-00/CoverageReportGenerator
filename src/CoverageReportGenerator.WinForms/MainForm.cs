@@ -5,6 +5,9 @@ using CoverageReportGenerator.Core.Settings;
 
 namespace CoverageReportGenerator.WinForms;
 
+/// <summary>
+/// カバレッジレポート生成のメイン画面。
+/// </summary>
 public sealed class MainForm : Form
 {
     private readonly AppSettingsService _settingsService = new();
@@ -29,6 +32,9 @@ public sealed class MainForm : Form
 
     private ProjectAnalysis? _analysis;
 
+    /// <summary>
+    /// メイン画面を初期化する。
+    /// </summary>
     public MainForm()
     {
         Text = "Coverage Report Generator";
@@ -39,6 +45,7 @@ public sealed class MainForm : Form
 
         BuildLayout();
         ApplySettings(_settingsService.Load());
+        // 前回の入力内容を表示したうえで、存在するプロジェクトだけ自動解析する。
         Shown += async (_, _) => await LoadSavedProjectIfAvailableAsync();
         FormClosing += (_, _) => SaveCurrentSettings();
     }
@@ -326,6 +333,7 @@ public sealed class MainForm : Form
         try
         {
             SetBusy(true);
+            // 生成に失敗しても、直前の入力内容は次回起動時に復元する。
             SaveCurrentSettings();
             var service = new CoverageReportGenerationService();
             var result = await service.GenerateAsync(new CoverageReportGenerationOptions(
@@ -469,6 +477,7 @@ public sealed class MainForm : Form
             Log($"Settings were not reset: {ex.Message}");
         }
 
+        // 保存済み設定と画面上の解析状態を同時に初期化する。
         _analysis = null;
         ApplySettings(AppSettings.Defaults);
         _projectStatus.Text = "Project: not loaded";

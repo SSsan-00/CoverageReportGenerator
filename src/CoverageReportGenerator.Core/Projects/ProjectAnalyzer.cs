@@ -2,17 +2,26 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Projects;
 
+/// <summary>
+/// .csprojを起点にソースファイルとメンバー情報を解析する。
+/// </summary>
 public sealed class ProjectAnalyzer
 {
     private readonly ProjectSourceResolver _resolver;
     private readonly RoslynSourceMemberParser _memberParser;
     private readonly ProjectCacheService _cache;
 
+    /// <summary>
+    /// 既定の依存関係で解析器を生成する。
+    /// </summary>
     public ProjectAnalyzer()
         : this(new ProjectSourceResolver(), new RoslynSourceMemberParser(), new ProjectCacheService())
     {
     }
 
+    /// <summary>
+    /// 依存関係を指定して解析器を生成する。
+    /// </summary>
     public ProjectAnalyzer(ProjectSourceResolver resolver, RoslynSourceMemberParser memberParser, ProjectCacheService cache)
     {
         _resolver = resolver;
@@ -20,6 +29,9 @@ public sealed class ProjectAnalyzer
         _cache = cache;
     }
 
+    /// <summary>
+    /// プロジェクトを解析し、変更のないファイルはキャッシュ済みメンバーを再利用する。
+    /// </summary>
     public async Task<ProjectAnalysis> AnalyzeAsync(string projectPath, IProgress<ProjectAnalysisProgress>? progress = null, CancellationToken cancellationToken = default)
     {
         var snapshot = await _resolver.ResolveAsync(projectPath, cancellationToken);
@@ -33,6 +45,7 @@ public sealed class ProjectAnalyzer
         var reusableMembers = new List<SourceMember>();
         var cachedFileMap = cached?.SourceFiles.ToDictionary(file => file.FullPath, PathUtilities.PathComparer) ?? [];
 
+        // ファイル単位の更新日時とサイズで、Roslyn解析を再実行する範囲を絞る。
         foreach (var file in snapshot.SourceFiles)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -67,4 +80,7 @@ public sealed class ProjectAnalyzer
     }
 }
 
+/// <summary>
+/// プロジェクト解析中の進捗メッセージ。
+/// </summary>
 public sealed record ProjectAnalysisProgress(string Message);

@@ -4,9 +4,16 @@ using CoverageReportGenerator.Core.Tests.TestSupport;
 
 namespace CoverageReportGenerator.Core.Tests;
 
+/// <summary>
+/// アプリ設定保存サービスのテスト。
+/// </summary>
+[TestClass]
 public sealed class AppSettingsServiceTests
 {
-    [Fact]
+    /// <summary>
+    /// 設定ファイルがない場合に既定値を返すことを検証する。
+    /// </summary>
+    [TestMethod]
     public void Load_returns_defaults_when_settings_file_does_not_exist()
     {
         using var workspace = TestWorkspace.Create();
@@ -14,10 +21,13 @@ public sealed class AppSettingsServiceTests
 
         var settings = service.Load();
 
-        Assert.Equal(AppSettings.Defaults, settings);
+        Assert.AreEqual(AppSettings.Defaults, settings);
     }
 
-    [Fact]
+    /// <summary>
+    /// 保存した入力値を再読込できることを検証する。
+    /// </summary>
+    [TestMethod]
     public void Save_and_load_round_trips_last_input_values()
     {
         using var workspace = TestWorkspace.Create();
@@ -37,10 +47,13 @@ public sealed class AppSettingsServiceTests
         service.Save(saved);
         var loaded = service.Load();
 
-        Assert.Equal(saved, loaded);
+        Assert.AreEqual(saved, loaded);
     }
 
-    [Fact]
+    /// <summary>
+    /// Resetで保存済み設定を削除することを検証する。
+    /// </summary>
+    [TestMethod]
     public void Reset_removes_saved_settings()
     {
         using var workspace = TestWorkspace.Create();
@@ -50,11 +63,14 @@ public sealed class AppSettingsServiceTests
 
         service.Reset();
 
-        Assert.False(File.Exists(path));
-        Assert.Equal(AppSettings.Defaults, service.Load());
+        Assert.IsFalse(File.Exists(path));
+        Assert.AreEqual(AppSettings.Defaults, service.Load());
     }
 
-    [Fact]
+    /// <summary>
+    /// 不正な設定ファイルを既定値へ戻すことを検証する。
+    /// </summary>
+    [TestMethod]
     public void Load_returns_defaults_when_settings_file_is_invalid()
     {
         using var workspace = TestWorkspace.Create();
@@ -63,6 +79,6 @@ public sealed class AppSettingsServiceTests
 
         var settings = service.Load();
 
-        Assert.Equal(AppSettings.Defaults, settings);
+        Assert.AreEqual(AppSettings.Defaults, settings);
     }
 }

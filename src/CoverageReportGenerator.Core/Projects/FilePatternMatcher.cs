@@ -3,8 +3,14 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Projects;
 
+/// <summary>
+/// セミコロン区切りのワイルドカード指定でファイルを判定する。
+/// </summary>
 public sealed class FilePatternMatcher
 {
+    /// <summary>
+    /// 相対パスがinclude/exclude条件に一致するか判定する。
+    /// </summary>
     public bool IsIncluded(string relativePath, string includePatterns, string excludePatterns)
     {
         var normalized = PathUtilities.NormalizeRelativePath(relativePath);

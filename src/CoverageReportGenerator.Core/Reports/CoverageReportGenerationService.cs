@@ -4,6 +4,9 @@ using CoverageReportGenerator.Core.Rendering;
 
 namespace CoverageReportGenerator.Core.Reports;
 
+/// <summary>
+/// プロジェクト解析からHTML出力までをまとめて実行する。
+/// </summary>
 public sealed class CoverageReportGenerationService
 {
     private readonly ProjectAnalyzer _projectAnalyzer;
@@ -11,11 +14,17 @@ public sealed class CoverageReportGenerationService
     private readonly CoverageReportBuilder _reportBuilder;
     private readonly HtmlReportRenderer _renderer;
 
+    /// <summary>
+    /// 既定の依存関係でサービスを生成する。
+    /// </summary>
     public CoverageReportGenerationService()
         : this(new ProjectAnalyzer(), new DotCoverDetailedXmlParser(), new CoverageReportBuilder(), new HtmlReportRenderer())
     {
     }
 
+    /// <summary>
+    /// 依存関係を指定してサービスを生成する。
+    /// </summary>
     public CoverageReportGenerationService(
         ProjectAnalyzer projectAnalyzer,
         DotCoverDetailedXmlParser dotCoverParser,
@@ -28,6 +37,9 @@ public sealed class CoverageReportGenerationService
         _renderer = renderer;
     }
 
+    /// <summary>
+    /// 指定オプションでHTMLレポートを生成する。
+    /// </summary>
     public async Task<CoverageReportGenerationResult> GenerateAsync(
         CoverageReportGenerationOptions options,
         IProgress<string>? progress = null,
@@ -93,6 +105,7 @@ public sealed class CoverageReportGenerationService
             return outputPath;
         }
 
+        // 既存ファイルを残す場合は、秒単位のタイムスタンプで出力名を分ける。
         var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss");
         return Path.Combine(options.OutputDirectory, $"{fileName}-{timestamp}.html");
     }
@@ -104,6 +117,9 @@ public sealed class CoverageReportGenerationService
     }
 }
 
+/// <summary>
+/// レポート生成に必要な入力オプション。
+/// </summary>
 public sealed record CoverageReportGenerationOptions(
     string ProjectPath,
     string DotCoverXmlPath,
@@ -115,6 +131,9 @@ public sealed record CoverageReportGenerationOptions(
     string ExcludePatterns,
     bool OverwriteExisting);
 
+/// <summary>
+/// レポート生成結果。
+/// </summary>
 public sealed record CoverageReportGenerationResult(
     string OutputPath,
     CoverageReport Report,

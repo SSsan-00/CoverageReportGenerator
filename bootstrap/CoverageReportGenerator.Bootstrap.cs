@@ -90,7 +90,6 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
     Directory.CreateDirectory(targetFullPath);
     var excludedDirectoryNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
-        "tests",
         ".git",
         ".vs",
         "bin",
@@ -98,6 +97,7 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
         "artifacts"
     };
 
+    // 出力先配下を再帰コピー対象から外し、自己コピーを防ぐ。
     CopyDirectoryContent(sourceFullPath, targetFullPath);
 
     void CopyDirectoryContent(string currentSource, string currentTarget)
@@ -164,12 +164,18 @@ static void Run(string fileName, IReadOnlyList<string> arguments)
     }
 }
 
+/// <summary>
+/// Bootstrap実行時のオプション。
+/// </summary>
 sealed record BootstrapOptions(
     string? SourcePath,
     string? RepositoryArchiveUrl,
     string OutputDirectory,
     bool KeepTemp)
 {
+    /// <summary>
+    /// コマンドライン引数をBootstrapオプションへ変換する。
+    /// </summary>
     public static BootstrapOptions Parse(string[] args)
     {
         string? sourcePath = null;

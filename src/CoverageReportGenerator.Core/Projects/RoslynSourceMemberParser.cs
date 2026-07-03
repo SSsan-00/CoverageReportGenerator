@@ -5,8 +5,14 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Projects;
 
+/// <summary>
+/// C#ソースをRoslynで解析し、表示用メンバー情報を抽出する。
+/// </summary>
 public sealed class RoslynSourceMemberParser
 {
+    /// <summary>
+    /// 指定ファイルからメソッド、プロパティ、ローカル関数、ラムダを取得する。
+    /// </summary>
     public async Task<IReadOnlyList<SourceMember>> ParseFileAsync(string filePath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(filePath);
@@ -22,6 +28,7 @@ public sealed class RoslynSourceMemberParser
         var relative = Path.GetFileName(filePath);
         var members = new List<SourceMember>();
 
+        // 宣言メンバー、アクセサ、ローカル関数、ラムダはSyntaxKindが分かれるため個別に集約する。
         foreach (var member in root.DescendantNodes().OfType<MemberDeclarationSyntax>())
         {
             cancellationToken.ThrowIfCancellationRequested();

@@ -4,8 +4,14 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Reports;
 
+/// <summary>
+/// プロジェクト解析結果とdotCover情報からHTML用レポートモデルを構築する。
+/// </summary>
 public sealed class CoverageReportBuilder
 {
+    /// <summary>
+    /// 指定された入力からレポートモデルを生成する。
+    /// </summary>
     public CoverageReport Build(CoverageReportRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -21,6 +27,7 @@ public sealed class CoverageReportBuilder
             .Select(file => PathUtilities.NormalizeFullPath(file.FullPath))
             .ToHashSet(PathUtilities.PathComparer);
 
+        // dotCoverのFileIndexは相対/絶対パスが混在するため、選択済みソースへ正規化して突き合わせる。
         var statements = request.DotCover.Statements
             .Select(statement => ResolveStatement(statement, fileLookup, request.Project.ProjectRoot, targetSelection.IncludedFiles))
             .Where(statement => statement is not null && selectedPaths.Contains(statement.FullPath))
@@ -30,11 +37,6 @@ public sealed class CoverageReportBuilder
         var fileIds = targetSelection.IncludedFiles
             .Select((file, index) => (file.FullPath, Id: index + 1))
             .ToDictionary(item => PathUtilities.NormalizeFullPath(item.FullPath), item => item.Id, PathUtilities.PathComparer);
-
-        var membersByFile = request.Project.Members
-            .Where(member => selectedPaths.Contains(PathUtilities.NormalizeFullPath(member.FilePath)))
-            .GroupBy(member => PathUtilities.NormalizeFullPath(member.FilePath), PathUtilities.PathComparer)
-            .ToDictionary(group => group.Key, group => group.ToList(), PathUtilities.PathComparer);
 
         var memberReports = BuildMemberReports(statements, request.Project.Members, fileIds)
             .OrderBy(member => member.RelativePath, StringComparer.OrdinalIgnoreCase)
@@ -162,6 +164,7 @@ public sealed class CoverageReportBuilder
             var status = LineCoverageStatus.NoData;
             if (statementByLine.TryGetValue(lineNumber, out var lineStatements))
             {
+                // 同一行にCovered/Uncoveredが混在する場合も、表示状態はCoveredへ寄せる。
                 status = lineStatements.Any(statement => statement.Covered)
                     ? LineCoverageStatus.Covered
                     : LineCoverageStatus.Uncovered;
@@ -201,6 +204,7 @@ public sealed class CoverageReportBuilder
                 continue;
             }
 
+            // ASTで得た行範囲に含まれるStatementをメンバー単位の集計として扱う。
             selectedMemberReports.Add(new MemberCoverageReport(
                 fileId,
                 member.FilePath,
@@ -233,6 +237,7 @@ public sealed class CoverageReportBuilder
         var assemblyChildren = new List<CoverageTreeItem>();
         foreach (var assemblyGroup in assemblies)
         {
+            // Assembly > Namespace > Type > Methodの順に、dotCover XMLの階層を保つ。
             var assembly = CreateTreeItem(++id, project.Id, CoverageTreeKind.Assembly, assemblyGroup.Key, 1, assemblyGroup, null, null);
             var namespaceChildren = new List<CoverageTreeItem>();
             foreach (var namespaceGroup in assemblyGroup.GroupBy(statement => statement.NamespaceName).OrderBy(group => group.Key))
@@ -286,6 +291,7 @@ public sealed class CoverageReportBuilder
 
         foreach (var group in statements.Where(statement => !matchedStatements.Contains(statement)).GroupBy(statement => statement.MethodName).OrderBy(group => group.Key))
         {
+            // Roslynで対応できないコンパイラ生成名はdotCover名のままMethodノードへ残す。
             methodMembers.Add(CreateTreeItem(++id, parentId, CoverageTreeKind.Method, group.Key, 4, group, null, null));
         }
 

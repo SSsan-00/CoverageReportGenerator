@@ -3,11 +3,17 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Projects;
 
+/// <summary>
+/// .csprojから解析対象ソースファイルを解決する。
+/// </summary>
 public sealed class ProjectSourceResolver
 {
     private static readonly string[] SourcePatterns = ["*.cs", "*.cshtml"];
     private static readonly string[] ExcludedSegments = ["bin", "obj", ".git"];
 
+    /// <summary>
+    /// プロジェクト配下の.csと.cshtmlを収集する。
+    /// </summary>
     public Task<ProjectSourceSnapshot> ResolveAsync(string projectPath, CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
@@ -46,6 +52,7 @@ public sealed class ProjectSourceResolver
             // Fall back to SDK-style directory scanning when the project XML cannot be inspected.
         }
 
+        // SDK-styleプロジェクトでは暗黙includeが多いため、明示includeと実ファイル走査を併用する。
         var explicitIncludes = document?
             .Descendants()
             .Where(element => IsSourceItem(element.Name.LocalName))

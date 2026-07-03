@@ -5,10 +5,17 @@ using CoverageReportGenerator.Core.Reports;
 
 namespace CoverageReportGenerator.Core.Rendering;
 
+/// <summary>
+/// カバレッジレポートを単一HTML文字列へ描画する。
+/// </summary>
 public sealed class HtmlReportRenderer
 {
+    // 一部環境の文字コード自動判定を安定させるため、HTMLはUTF-8 BOM付きで保存する。
     private static readonly UTF8Encoding HtmlEncoding = new(encoderShouldEmitUTF8Identifier: true);
 
+    /// <summary>
+    /// レポートをHTMLファイルへ書き出す。
+    /// </summary>
     public void RenderToFile(CoverageReport report, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(report);
@@ -23,6 +30,9 @@ public sealed class HtmlReportRenderer
         File.WriteAllText(outputPath, Render(report), HtmlEncoding);
     }
 
+    /// <summary>
+    /// レポートをHTML文字列として生成する。
+    /// </summary>
     public string Render(CoverageReport report)
     {
         var html = new StringBuilder();

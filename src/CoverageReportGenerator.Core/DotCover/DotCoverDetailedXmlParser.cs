@@ -5,6 +5,9 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.DotCover;
 
+/// <summary>
+/// dotCover DetailedXMLをレポート生成用モデルへ変換する。
+/// </summary>
 public sealed class DotCoverDetailedXmlParser
 {
     static DotCoverDetailedXmlParser()
@@ -12,6 +15,9 @@ public sealed class DotCoverDetailedXmlParser
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
+    /// <summary>
+    /// XMLファイルを読み込み解析する。
+    /// </summary>
     public DotCoverReport ParseFile(string path)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(path);
@@ -22,6 +28,7 @@ public sealed class DotCoverDetailedXmlParser
         }
         catch (Exception ex) when (ex is System.Xml.XmlException or InvalidOperationException or NotSupportedException)
         {
+            // XML宣言だけで判定できないShift_JIS系ファイルは、独自の文字コード判定で再読込する。
             try
             {
                 return Parse(SourceTextReader.ReadAllText(path));
@@ -33,6 +40,9 @@ public sealed class DotCoverDetailedXmlParser
         }
     }
 
+    /// <summary>
+    /// XML文字列を解析する。
+    /// </summary>
     public DotCoverReport Parse(string xml)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(xml);
@@ -53,6 +63,7 @@ public sealed class DotCoverDetailedXmlParser
     private static DotCoverReport ParseDocument(XDocument document)
     {
         var root = document.Root ?? throw new DotCoverParseException("DotCover XML does not have a root element.");
+        // FileIndicesはRoot直下以外に出ても拾えるよう、XML全体から探索する。
         var fileIndices = root.DescendantsAndSelf()
             .Where(element => element.Name.LocalName == "FileIndices")
             .SelectMany(element => element.Elements().Where(child => child.Name.LocalName == "File"))

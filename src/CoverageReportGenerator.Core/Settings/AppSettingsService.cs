@@ -2,6 +2,9 @@ using System.Text.Json;
 
 namespace CoverageReportGenerator.Core.Settings;
 
+/// <summary>
+/// 画面入力値をローカルJSONとして保存・復元する。
+/// </summary>
 public sealed class AppSettingsService
 {
     private readonly string _settingsPath;
@@ -10,16 +13,25 @@ public sealed class AppSettingsService
         WriteIndented = true
     };
 
+    /// <summary>
+    /// 既定の設定ファイルを使用する。
+    /// </summary>
     public AppSettingsService()
         : this(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CoverageReportGenerator", "settings.json"))
     {
     }
 
+    /// <summary>
+    /// 設定ファイルのパスを指定して生成する。
+    /// </summary>
     public AppSettingsService(string settingsPath)
     {
         _settingsPath = settingsPath;
     }
 
+    /// <summary>
+    /// 保存済み設定を読み込む。読込不能な場合は既定値を返す。
+    /// </summary>
     public AppSettings Load()
     {
         if (!File.Exists(_settingsPath))
@@ -38,6 +50,9 @@ public sealed class AppSettingsService
         }
     }
 
+    /// <summary>
+    /// 現在の設定を保存する。
+    /// </summary>
     public void Save(AppSettings settings)
     {
         var directory = Path.GetDirectoryName(_settingsPath);
@@ -50,6 +65,9 @@ public sealed class AppSettingsService
         JsonSerializer.Serialize(stream, Normalize(settings), _serializerOptions);
     }
 
+    /// <summary>
+    /// 保存済み設定を削除する。
+    /// </summary>
     public void Reset()
     {
         if (File.Exists(_settingsPath))

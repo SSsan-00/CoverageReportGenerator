@@ -4,9 +4,16 @@ using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
+/// <summary>
+/// dotCover DetailedXMLパーサーのテスト。
+/// </summary>
+[TestClass]
 public sealed class DotCoverDetailedXmlParserTests
 {
-    [Fact]
+    /// <summary>
+    /// FileIndicesとStatementを要素順に依存せず読めることを検証する。
+    /// </summary>
+    [TestMethod]
     public void Parse_reads_file_indices_and_statements_without_depending_on_element_order()
     {
         const string xml = """
@@ -32,17 +39,20 @@ public sealed class DotCoverDetailedXmlParserTests
 
         var report = new DotCoverDetailedXmlParser().Parse(xml);
 
-        Assert.Equal(2, report.Root.CoveredStatements);
-        Assert.Equal(3, report.Root.TotalStatements);
-        Assert.Single(report.Files);
-        Assert.Equal(@"Pages\Index.cshtml.cs", report.Files[0].Name);
-        Assert.Equal(3, report.Statements.Count);
-        Assert.Equal("OnGetAsync():System.Threading.Tasks.Task", report.Statements[0].MethodName);
-        Assert.Equal("<OnPostAsync>d__4.MoveNext():System.Void", report.Statements[1].MethodName);
-        Assert.Equal("Sample.Pages", report.Statements[2].NamespaceName);
+        Assert.AreEqual(2, report.Root.CoveredStatements);
+        Assert.AreEqual(3, report.Root.TotalStatements);
+        Assert.AreEqual(1, report.Files.Count);
+        Assert.AreEqual(@"Pages\Index.cshtml.cs", report.Files[0].Name);
+        Assert.AreEqual(3, report.Statements.Count);
+        Assert.AreEqual("OnGetAsync():System.Threading.Tasks.Task", report.Statements[0].MethodName);
+        Assert.AreEqual("<OnPostAsync>d__4.MoveNext():System.Void", report.Statements[1].MethodName);
+        Assert.AreEqual("Sample.Pages", report.Statements[2].NamespaceName);
     }
 
-    [Fact]
+    /// <summary>
+    /// Statement Covered属性がない場合に失敗することを検証する。
+    /// </summary>
+    [TestMethod]
     public void Parse_fails_when_statement_does_not_have_required_covered_attribute()
     {
         const string xml = """
@@ -60,11 +70,14 @@ public sealed class DotCoverDetailedXmlParserTests
             </Root>
             """;
 
-        var ex = Assert.Throws<DotCoverParseException>(() => new DotCoverDetailedXmlParser().Parse(xml));
-        Assert.Contains("Covered", ex.Message);
+        var ex = Assert.ThrowsException<DotCoverParseException>(() => new DotCoverDetailedXmlParser().Parse(xml));
+        StringAssert.Contains(ex.Message, "Covered");
     }
 
-    [Fact]
+    /// <summary>
+    /// 任意階層が欠けたStatementへUnknownを補完することを検証する。
+    /// </summary>
+    [TestMethod]
     public void Parse_uses_unknown_for_missing_optional_hierarchy()
     {
         const string xml = """
@@ -76,14 +89,18 @@ public sealed class DotCoverDetailedXmlParserTests
 
         var report = new DotCoverDetailedXmlParser().Parse(xml);
 
-        var statement = Assert.Single(report.Statements);
-        Assert.Equal("Unknown Assembly", statement.AssemblyName);
-        Assert.Equal("Unknown Namespace", statement.NamespaceName);
-        Assert.Equal("Unknown Type", statement.TypeName);
-        Assert.Equal("Unknown Method", statement.MethodName);
+        Assert.AreEqual(1, report.Statements.Count);
+        var statement = report.Statements[0];
+        Assert.AreEqual("Unknown Assembly", statement.AssemblyName);
+        Assert.AreEqual("Unknown Namespace", statement.NamespaceName);
+        Assert.AreEqual("Unknown Type", statement.TypeName);
+        Assert.AreEqual("Unknown Method", statement.MethodName);
     }
 
-    [Fact]
+    /// <summary>
+    /// XML宣言付きShift_JISファイルを読めることを検証する。
+    /// </summary>
+    [TestMethod]
     public void ParseFile_respects_shift_jis_xml_encoding_declaration()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -107,13 +124,18 @@ public sealed class DotCoverDetailedXmlParserTests
 
         var report = new DotCoverDetailedXmlParser().ParseFile(path);
 
-        Assert.Equal(@"Pages\一覧.cshtml.cs", Assert.Single(report.Files).Name);
-        var statement = Assert.Single(report.Statements);
-        Assert.Equal("サンプル.Pages", statement.NamespaceName);
-        Assert.Equal("一覧Model", statement.TypeName);
+        Assert.AreEqual(1, report.Files.Count);
+        Assert.AreEqual(@"Pages\一覧.cshtml.cs", report.Files[0].Name);
+        Assert.AreEqual(1, report.Statements.Count);
+        var statement = report.Statements[0];
+        Assert.AreEqual("サンプル.Pages", statement.NamespaceName);
+        Assert.AreEqual("一覧Model", statement.TypeName);
     }
 
-    [Fact]
+    /// <summary>
+    /// XML宣言なしShift_JISファイルをフォールバックで読めることを検証する。
+    /// </summary>
+    [TestMethod]
     public void ParseFile_falls_back_to_shift_jis_when_xml_has_no_encoding_declaration()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -136,9 +158,11 @@ public sealed class DotCoverDetailedXmlParserTests
 
         var report = new DotCoverDetailedXmlParser().ParseFile(path);
 
-        Assert.Equal(@"Pages\詳細.cshtml.cs", Assert.Single(report.Files).Name);
-        var statement = Assert.Single(report.Statements);
-        Assert.Equal("サンプル.Pages", statement.NamespaceName);
-        Assert.Equal("詳細Model", statement.TypeName);
+        Assert.AreEqual(1, report.Files.Count);
+        Assert.AreEqual(@"Pages\詳細.cshtml.cs", report.Files[0].Name);
+        Assert.AreEqual(1, report.Statements.Count);
+        var statement = report.Statements[0];
+        Assert.AreEqual("サンプル.Pages", statement.NamespaceName);
+        Assert.AreEqual("詳細Model", statement.TypeName);
     }
 }

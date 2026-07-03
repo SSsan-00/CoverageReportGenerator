@@ -78,7 +78,7 @@ function Copy-SourceTree {
         Remove-Item -LiteralPath $targetFullPath -Recurse -Force
     }
 
-    $excludedDirectoryNames = @("tests", ".git", ".vs", "bin", "obj", "artifacts")
+    $excludedDirectoryNames = @(".git", ".vs", "bin", "obj", "artifacts")
     New-Item -ItemType Directory -Force -Path $targetFullPath | Out-Null
 
     function Copy-DirectoryContent {

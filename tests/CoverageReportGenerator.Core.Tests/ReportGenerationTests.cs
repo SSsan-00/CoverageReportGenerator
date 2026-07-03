@@ -7,15 +7,22 @@ using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
+/// <summary>
+/// レポートモデル生成とHTML描画のテスト。
+/// </summary>
+[TestClass]
 public sealed class ReportGenerationTests
 {
-    [Fact]
+    /// <summary>
+    /// 行状態がCovered/Uncovered/NoDataへ集約されることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Report_builder_marks_lines_as_covered_uncovered_or_no_data_without_partial_status()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Index.cshtml.cs", """
@@ -49,22 +56,26 @@ public sealed class ReportGenerationTests
 
         var report = await BuildReportAsync(project, xml);
 
-        var file = Assert.Single(report.Files);
-        Assert.Equal(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 5).Status);
-        Assert.Equal(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 6).Status);
-        Assert.Equal(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 7).Status);
-        Assert.Equal(LineCoverageStatus.NoData, file.Lines.Single(line => line.LineNumber == 8).Status);
-        Assert.Equal(2, report.Summary.CoveredStatements);
-        Assert.Equal(4, report.Summary.TotalStatements);
+        Assert.AreEqual(1, report.Files.Count);
+        var file = report.Files[0];
+        Assert.AreEqual(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 5).Status);
+        Assert.AreEqual(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 6).Status);
+        Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 7).Status);
+        Assert.AreEqual(LineCoverageStatus.NoData, file.Lines.Single(line => line.LineNumber == 8).Status);
+        Assert.AreEqual(2, report.Summary.CoveredStatements);
+        Assert.AreEqual(4, report.Summary.TotalStatements);
     }
 
-    [Fact]
+    /// <summary>
+    /// フォルダ範囲がツリー、ランキング、ファイル、ソースへ反映されることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Folder_scope_report_includes_only_selected_folder_in_tree_rankings_files_and_sources()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Admin\Edit.cshtml.cs", """
@@ -94,21 +105,24 @@ public sealed class ReportGenerationTests
 
         var report = await BuildReportAsync(project, xml, CoverageScopeType.Folder, workspace.PathOf(@"Pages\Admin"));
 
-        Assert.Single(report.Files);
-        Assert.Equal(@"Pages\Admin\Edit.cshtml.cs", report.Files[0].RelativePath);
-        Assert.Contains(report.Tree.Flatten(), item => item.Kind == CoverageTreeKind.Namespace && item.Name == "Sample.Pages.Admin");
-        Assert.DoesNotContain(report.Tree.Flatten(), item => item.Name == "Sample.Pages.Public");
-        Assert.Single(report.Rankings.LowestMembers);
-        Assert.Equal("OnPost", report.Rankings.LowestMembers[0].DisplayName);
+        Assert.AreEqual(1, report.Files.Count);
+        Assert.AreEqual(@"Pages\Admin\Edit.cshtml.cs", report.Files[0].RelativePath);
+        Assert.IsTrue(report.Tree.Flatten().Any(item => item.Kind == CoverageTreeKind.Namespace && item.Name == "Sample.Pages.Admin"));
+        Assert.IsFalse(report.Tree.Flatten().Any(item => item.Name == "Sample.Pages.Public"));
+        Assert.AreEqual(1, report.Rankings.LowestMembers.Count);
+        Assert.AreEqual("OnPost", report.Rankings.LowestMembers[0].DisplayName);
     }
 
-    [Fact]
+    /// <summary>
+    /// HTMLがランキング、ソースアンカー、現行タブ構成を出力することを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Html_renderer_outputs_rankings_source_anchors_and_no_removed_tabs()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Index.cshtml.cs", """
@@ -135,16 +149,19 @@ public sealed class ReportGenerationTests
 
         var html = new HtmlReportRenderer().Render(report);
 
-        Assert.Contains("Lowest Members", html);
-        Assert.Contains("src-file-1-line-6", html);
-        Assert.Contains("jumpToSource(1, 4)", html);
-        Assert.DoesNotContain("Partial", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Raw", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("Coverage Tree", html, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("tab-tree", html, StringComparison.OrdinalIgnoreCase);
+        StringAssert.Contains(html, "Lowest Members");
+        StringAssert.Contains(html, "src-file-1-line-6");
+        StringAssert.Contains(html, "jumpToSource(1, 4)");
+        Assert.IsFalse(html.Contains("Partial", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(html.Contains("Raw", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(html.Contains("Coverage Tree", StringComparison.OrdinalIgnoreCase));
+        Assert.IsFalse(html.Contains("tab-tree", StringComparison.OrdinalIgnoreCase));
     }
 
-    [Fact]
+    /// <summary>
+    /// CP932ソースの日本語がHTMLで保持されることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Html_renderer_preserves_japanese_text_from_cp932_source_files()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -152,7 +169,7 @@ public sealed class ReportGenerationTests
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         var source = """
@@ -180,7 +197,7 @@ public sealed class ReportGenerationTests
         var report = await BuildReportAsync(project, xml);
         var html = new HtmlReportRenderer().Render(report);
 
-        Assert.Contains("日本語コメント", html);
+        StringAssert.Contains(html, "日本語コメント");
     }
 
     private static async Task<CoverageReport> BuildReportAsync(

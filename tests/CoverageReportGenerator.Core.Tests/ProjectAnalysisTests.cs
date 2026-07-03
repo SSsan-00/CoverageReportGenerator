@@ -5,26 +5,36 @@ using System.Text;
 
 namespace CoverageReportGenerator.Core.Tests;
 
+/// <summary>
+/// プロジェクト解析とRoslynメンバー解析のテスト。
+/// </summary>
+[TestClass]
 public sealed class ProjectAnalysisTests
 {
-    [Fact]
+    /// <summary>
+    /// .csproj以外の入力を拒否することを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Source_resolver_rejects_paths_that_are_not_csproj_files()
     {
         using var workspace = TestWorkspace.Create();
         var solution = workspace.Write("Sample.sln", string.Empty);
 
-        var ex = await Assert.ThrowsAsync<ArgumentException>(() => new ProjectSourceResolver().ResolveAsync(solution));
+        var ex = await Assert.ThrowsExceptionAsync<ArgumentException>(() => new ProjectSourceResolver().ResolveAsync(solution));
 
-        Assert.Contains(".csproj", ex.Message);
+        StringAssert.Contains(ex.Message, ".csproj");
     }
 
-    [Fact]
+    /// <summary>
+    /// Razor Pagesプロジェクトでフォルダ範囲を再帰的に選択できることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Source_resolver_reads_razor_project_files_and_applies_folder_scope_recursively()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         workspace.Write(@"Pages\Admin\Edit.cshtml.cs", "public class EditModel { public void OnGet() {} }");
@@ -42,19 +52,26 @@ public sealed class ProjectAnalysisTests
             "*.cs",
             "*.g.cs;bin;obj"));
 
-        Assert.Equal(3, snapshot.SourceFiles.Count);
-        Assert.Equal(2, selected.IncludedFiles.Count);
-        Assert.All(selected.IncludedFiles, file => Assert.Contains(@"\Pages\Admin\", file.FullPath));
-        Assert.DoesNotContain(selected.IncludedFiles, file => file.FullPath.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase));
+        Assert.AreEqual(3, snapshot.SourceFiles.Count);
+        Assert.AreEqual(2, selected.IncludedFiles.Count);
+        foreach (var file in selected.IncludedFiles)
+        {
+            StringAssert.Contains(file.FullPath, @"\Pages\Admin\");
+        }
+
+        Assert.IsFalse(selected.IncludedFiles.Any(file => file.FullPath.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase)));
     }
 
-    [Fact]
+    /// <summary>
+    /// Compile Includeがあってもディレクトリ走査を継続することを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Source_resolver_does_not_stop_directory_scanning_when_compile_include_exists()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
               <ItemGroup>
                 <Compile Include="Linked\OnlyExplicit.cs" />
               </ItemGroup>
@@ -66,12 +83,15 @@ public sealed class ProjectAnalysisTests
 
         var snapshot = await new ProjectSourceResolver().ResolveAsync(project);
 
-        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Linked\OnlyExplicit.cs");
-        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Pages\Index.cshtml");
-        Assert.Contains(snapshot.SourceFiles, file => file.RelativePath == @"Pages\Index.cshtml.cs");
+        Assert.IsTrue(snapshot.SourceFiles.Any(file => file.RelativePath == @"Linked\OnlyExplicit.cs"));
+        Assert.IsTrue(snapshot.SourceFiles.Any(file => file.RelativePath == @"Pages\Index.cshtml"));
+        Assert.IsTrue(snapshot.SourceFiles.Any(file => file.RelativePath == @"Pages\Index.cshtml.cs"));
     }
 
-    [Fact]
+    /// <summary>
+    /// Roslyn解析で主要なメンバー種別を検出できることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Roslyn_member_parser_finds_methods_properties_local_functions_and_lambdas()
     {
         using var workspace = TestWorkspace.Create();
@@ -92,13 +112,16 @@ public sealed class ProjectAnalysisTests
 
         var members = await new RoslynSourceMemberParser().ParseFileAsync(source);
 
-        Assert.Contains(members, member => member.Kind == SourceMemberKind.Property && member.Name == "Name");
-        Assert.Contains(members, member => member.Kind == SourceMemberKind.Method && member.Name == "OnPostAsync");
-        Assert.Contains(members, member => member.Kind == SourceMemberKind.LocalFunction && member.Name == "Validate");
-        Assert.Contains(members, member => member.Kind == SourceMemberKind.Lambda && member.DisplayName.Contains("lambda in OnPostAsync"));
+        Assert.IsTrue(members.Any(member => member.Kind == SourceMemberKind.Property && member.Name == "Name"));
+        Assert.IsTrue(members.Any(member => member.Kind == SourceMemberKind.Method && member.Name == "OnPostAsync"));
+        Assert.IsTrue(members.Any(member => member.Kind == SourceMemberKind.LocalFunction && member.Name == "Validate"));
+        Assert.IsTrue(members.Any(member => member.Kind == SourceMemberKind.Lambda && member.DisplayName.Contains("lambda in OnPostAsync")));
     }
 
-    [Fact]
+    /// <summary>
+    /// Shift_JISのC#ソースをRoslyn解析できることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Roslyn_member_parser_reads_shift_jis_source_files()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -115,16 +138,19 @@ public sealed class ProjectAnalysisTests
 
         var members = await new RoslynSourceMemberParser().ParseFileAsync(path);
 
-        Assert.Contains(members, member => member.Kind == SourceMemberKind.Method && member.Name == "日本語メソッド");
+        Assert.IsTrue(members.Any(member => member.Kind == SourceMemberKind.Method && member.Name == "日本語メソッド"));
     }
 
-    [Fact]
+    /// <summary>
+    /// 未変更ファイルの解析結果をキャッシュ再利用できることを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Project_cache_reuses_unchanged_member_analysis_and_rebuilds_changed_files()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         var source = workspace.Write(@"Pages\Index.cshtml.cs", "public class IndexModel { public void OnGet() {} }");
@@ -134,23 +160,26 @@ public sealed class ProjectAnalysisTests
         var first = await analyzer.AnalyzeAsync(project);
         var second = await analyzer.AnalyzeAsync(project);
 
-        Assert.Equal(ProjectCacheStatus.Created, first.CacheStatus);
-        Assert.Equal(ProjectCacheStatus.Valid, second.CacheStatus);
+        Assert.AreEqual(ProjectCacheStatus.Created, first.CacheStatus);
+        Assert.AreEqual(ProjectCacheStatus.Valid, second.CacheStatus);
 
         await File.AppendAllTextAsync(source, Environment.NewLine + "public class Extra { public void Run() {} }");
         var third = await analyzer.AnalyzeAsync(project);
 
-        Assert.Equal(ProjectCacheStatus.Updated, third.CacheStatus);
-        Assert.Contains(third.Members, member => member.Name == "Run");
+        Assert.AreEqual(ProjectCacheStatus.Updated, third.CacheStatus);
+        Assert.IsTrue(third.Members.Any(member => member.Name == "Run"));
     }
 
-    [Fact]
+    /// <summary>
+    /// 古いスキーマのキャッシュを無視することを検証する。
+    /// </summary>
+    [TestMethod]
     public async Task Project_cache_ignores_entries_from_previous_schema_versions()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
             <Project Sdk="Microsoft.NET.Sdk.Web">
-              <PropertyGroup><TargetFramework>net9.0</TargetFramework></PropertyGroup>
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
             </Project>
             """);
         var source = workspace.Write(@"Pages\Index.cshtml.cs", "public class IndexModel { public void OnGet() {} }");
@@ -170,8 +199,8 @@ public sealed class ProjectAnalysisTests
 
         var analysis = await new ProjectAnalyzer(resolver, new RoslynSourceMemberParser(), cache).AnalyzeAsync(project);
 
-        Assert.Equal(ProjectCacheStatus.Created, analysis.CacheStatus);
-        Assert.Contains(analysis.Members, member => member.Name == "OnGet");
-        Assert.DoesNotContain(analysis.Members, member => member.Name == "BrokenCachedName");
+        Assert.AreEqual(ProjectCacheStatus.Created, analysis.CacheStatus);
+        Assert.IsTrue(analysis.Members.Any(member => member.Name == "OnGet"));
+        Assert.IsFalse(analysis.Members.Any(member => member.Name == "BrokenCachedName"));
     }
 }

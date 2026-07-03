@@ -3,10 +3,16 @@ using CoverageReportGenerator.Core.Utilities;
 
 namespace CoverageReportGenerator.Core.Reports;
 
+/// <summary>
+/// プロジェクト内ソースからレポート対象ファイルを選択する。
+/// </summary>
 public sealed class CoverageTargetSelector
 {
     private readonly FilePatternMatcher _matcher = new();
 
+    /// <summary>
+    /// 範囲種別とinclude/exclude指定に一致するファイルを返す。
+    /// </summary>
     public CoverageTargetSelection Select(ProjectSourceSnapshot snapshot, CoverageSelection selection)
     {
         var included = snapshot.SourceFiles
@@ -32,6 +38,9 @@ public sealed class CoverageTargetSelector
     }
 }
 
+/// <summary>
+/// 選択条件と対象ファイル一覧。
+/// </summary>
 public sealed record CoverageTargetSelection(
     CoverageSelection Selection,
     IReadOnlyList<SourceFile> IncludedFiles);
