@@ -137,14 +137,12 @@ public sealed class MainForm : Form
         _previewGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _previewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
         _previewGrid.Columns.Add("Included", "対象");
-        _previewGrid.Columns.Add("Coverage", "カバレッジ");
         _previewGrid.Columns.Add("Members", "メンバー");
         _previewGrid.Columns.Add("Path", "パス");
         _previewGrid.Columns.Add("Reason", "理由");
-        _previewGrid.Columns["Included"]!.FillWeight = 14;
-        _previewGrid.Columns["Coverage"]!.FillWeight = 18;
+        _previewGrid.Columns["Included"]!.FillWeight = 10;
         _previewGrid.Columns["Members"]!.FillWeight = 14;
-        _previewGrid.Columns["Path"]!.FillWeight = 74;
+        _previewGrid.Columns["Path"]!.FillWeight = 82;
         _previewGrid.Columns["Reason"]!.FillWeight = 40;
         panel.Controls.Add(_previewGrid, 0, 1);
         return panel;
@@ -458,7 +456,7 @@ public sealed class MainForm : Form
         {
             var included = selectedSet.Contains(file.FullPath);
             var members = _analysis.Members.Count(member => member.FilePath.Equals(file.FullPath, StringComparison.OrdinalIgnoreCase));
-            _previewGrid.Rows.Add(included ? "はい" : "いいえ", "未生成", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "フィルタまたは対象範囲外です");
+            _previewGrid.Rows.Add(included ? "○" : "×", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "フィルタまたは対象範囲外です");
         }
 
         _previewStatus.Text = $"対象プレビュー · ファイル: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · メンバー: {_analysis.Members.Count}";

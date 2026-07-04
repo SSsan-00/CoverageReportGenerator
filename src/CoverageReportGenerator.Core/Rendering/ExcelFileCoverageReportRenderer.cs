@@ -106,7 +106,7 @@ public sealed class ExcelFileCoverageReportRenderer
         }
 
         AddMemberSourceLinks(worksheet, memberRows, sourceRowsByLine);
-        ApplyWorksheetStyle(worksheet, sourceStartRow);
+        ApplyWorksheetStyle(worksheet);
     }
 
     private static void AddMemberSourceLinks(
@@ -126,17 +126,23 @@ public sealed class ExcelFileCoverageReportRenderer
         }
     }
 
-    private static void ApplyWorksheetStyle(IXLWorksheet worksheet, int sourceStartRow)
+    private static void ApplyWorksheetStyle(IXLWorksheet worksheet)
     {
-        worksheet.Column(1).Width = 5;
-        worksheet.Column(2).Width = 140;
-        worksheet.Column(3).Width = 22;
-        worksheet.Column(4).Width = 12;
-        worksheet.Column(5).Width = 18;
-        worksheet.Columns(6, 7).AdjustToContents();
+        worksheet.Columns(1, 7).AdjustToContents();
+        EnsureColumnWidth(worksheet.Column(1), 5, 12);
+        EnsureColumnWidth(worksheet.Column(2), 140, 180);
+        EnsureColumnWidth(worksheet.Column(3), 22, 80);
+        EnsureColumnWidth(worksheet.Column(4), 12, 20);
+        EnsureColumnWidth(worksheet.Column(5), 18, 24);
+        EnsureColumnWidth(worksheet.Column(6), 12, 20);
+        EnsureColumnWidth(worksheet.Column(7), 10, 18);
         worksheet.RangeUsed()!.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-        worksheet.SheetView.FreezeRows(sourceStartRow - 1);
         worksheet.RangeUsed()?.SetAutoFilter();
+    }
+
+    private static void EnsureColumnWidth(IXLColumn column, double minimumWidth, double maximumWidth)
+    {
+        column.Width = Math.Clamp(column.Width, minimumWidth, maximumWidth);
     }
 
     private static void Header(IXLWorksheet worksheet, int row, IReadOnlyList<string> labels)

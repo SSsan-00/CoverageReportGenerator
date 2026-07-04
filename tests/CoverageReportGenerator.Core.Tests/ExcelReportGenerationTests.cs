@@ -65,6 +65,9 @@ public sealed class ExcelReportGenerationTests
         Assert.IsTrue(File.Exists(result.OutputPath));
         using var workbook = new XLWorkbook(result.OutputPath);
         var worksheet = workbook.Worksheet("Coverage");
+        Assert.AreEqual(0, worksheet.SheetView.SplitRow);
+        Assert.IsTrue(worksheet.Column(2).Width >= 140);
+        Assert.IsTrue(worksheet.Column(3).Width >= 22);
         Assert.AreEqual("カバレッジレポート", worksheet.Cell(1, 1).GetString());
         Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.GetString().Contains('■')));
         Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 1 && cell.GetString() == "※"));
