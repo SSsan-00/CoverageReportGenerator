@@ -26,10 +26,10 @@ public sealed class ProjectAnalysisTests
     }
 
     /// <summary>
-    /// Razor Pagesプロジェクトでフォルダ範囲を再帰的に選択できることを検証する。
+    /// Razor Pagesプロジェクトでプロジェクト、フォルダ、ファイル範囲を選択できることを検証する。
     /// </summary>
     [TestMethod]
-    public async Task Source_resolver_reads_razor_project_files_and_applies_folder_scope_recursively()
+    public async Task Source_resolver_reads_razor_project_files_and_applies_project_folder_and_file_scopes()
     {
         using var workspace = TestWorkspace.Create();
         var project = workspace.Write("Sample.Web.csproj", """
@@ -46,20 +46,33 @@ public sealed class ProjectAnalysisTests
         var snapshot = await resolver.ResolveAsync(project);
 
         var selector = new CoverageTargetSelector();
-        var selected = selector.Select(snapshot, new CoverageSelection(
+        var projectSelected = selector.Select(snapshot, new CoverageSelection(
+            CoverageScopeType.Project,
+            null,
+            "*.cs",
+            "*.g.cs;bin;obj"));
+        var folderSelected = selector.Select(snapshot, new CoverageSelection(
             CoverageScopeType.Folder,
             workspace.PathOf(@"Pages\Admin"),
             "*.cs",
             "*.g.cs;bin;obj"));
+        var fileSelected = selector.Select(snapshot, new CoverageSelection(
+            CoverageScopeType.File,
+            workspace.PathOf(@"Pages\Admin\Edit.cshtml.cs"),
+            "*.cs",
+            "*.g.cs;bin;obj"));
 
         Assert.AreEqual(3, snapshot.SourceFiles.Count);
-        Assert.AreEqual(2, selected.IncludedFiles.Count);
-        foreach (var file in selected.IncludedFiles)
+        Assert.AreEqual(3, projectSelected.IncludedFiles.Count);
+        Assert.AreEqual(2, folderSelected.IncludedFiles.Count);
+        foreach (var file in folderSelected.IncludedFiles)
         {
             StringAssert.Contains(file.FullPath, @"\Pages\Admin\");
         }
 
-        Assert.IsFalse(selected.IncludedFiles.Any(file => file.FullPath.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase)));
+        Assert.IsFalse(projectSelected.IncludedFiles.Any(file => file.FullPath.Contains(@"\obj\", StringComparison.OrdinalIgnoreCase)));
+        Assert.AreEqual(1, fileSelected.IncludedFiles.Count);
+        Assert.AreEqual(@"Pages\Admin\Edit.cshtml.cs", fileSelected.IncludedFiles[0].RelativePath);
     }
 
     /// <summary>
@@ -127,6 +140,41 @@ public sealed class ProjectAnalysisTests
         var analysis = await analyzer.AnalyzeAsync(project);
 
         Assert.IsTrue(analysis.Members.Any(member => member.RelativePath == @"Pages\Admin\Edit.cshtml.cs"));
+    }
+
+    /// <summary>
+    /// 有効なキャッシュ内の古いメンバー相対パスをプロジェクト相対パスへ補正することを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Project_analyzer_normalizes_member_relative_paths_from_valid_cache()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        var source = workspace.Write(@"Pages\Admin\Edit.cshtml.cs", "public class EditModel { public void OnGet() {} }");
+        var cacheDir = workspace.CreateDirectory("cache");
+        var resolver = new ProjectSourceResolver();
+        var cache = new ProjectCacheService(cacheDir);
+        var snapshot = await resolver.ResolveAsync(project);
+        var cachedAnalysis = new ProjectAnalysis(
+            snapshot.ProjectPath,
+            snapshot.ProjectName,
+            snapshot.ProjectRoot,
+            snapshot.SourceFiles,
+            [new SourceMember(source, Path.GetFileName(source), SourceMemberKind.Method, "EditModel", "OnGet", "OnGet", "OnGet()", 1, 1)],
+            ProjectCacheStatus.Created);
+        await cache.SaveAsync(cache.CreateEntry(cachedAnalysis));
+
+        var analysis = await new ProjectAnalyzer(resolver, new RoslynSourceMemberParser(), cache).AnalyzeAsync(project);
+        var tree = new ProjectFolderTreeBuilder().Build(analysis);
+
+        Assert.AreEqual(ProjectCacheStatus.Valid, analysis.CacheStatus);
+        Assert.IsTrue(analysis.Members.Any(member => member.RelativePath == @"Pages\Admin\Edit.cshtml.cs"));
+        Assert.AreEqual(1, tree.Children.Single(folder => folder.Name == "Pages").MemberCount);
+        Assert.AreEqual(1, tree.Children.Single(folder => folder.Name == "Pages").Children.Single(folder => folder.Name == "Admin").MemberCount);
     }
 
     /// <summary>
