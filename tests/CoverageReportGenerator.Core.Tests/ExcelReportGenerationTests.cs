@@ -37,15 +37,32 @@ public sealed class ExcelReportGenerationTests
                 }
             }
             """);
+        workspace.Write(@"Pages\Other.cshtml.cs", """
+            public class OtherModel
+            {
+                public void OnGet()
+                {
+                    var other = 1;
+                }
+            }
+            """);
         var xml = workspace.Write("dotcover.xml", """
             <Root CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
-              <FileIndices><File Index="1" Name="Pages\Index.cshtml.cs" /></FileIndices>
+              <FileIndices>
+                <File Index="1" Name="Pages\Index.cshtml.cs" />
+                <File Index="2" Name="Pages\Other.cshtml.cs" />
+              </FileIndices>
               <Assembly Name="Sample.Web" CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
                 <Namespace Name="Sample.Pages" CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
                   <Type Name="IndexModel" CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
                     <Method Name="OnGet():System.Void" CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
                       <Statement FileIndex="1" Line="5" Covered="True" />
                       <Statement FileIndex="1" Line="6" Covered="False" />
+                    </Method>
+                  </Type>
+                  <Type Name="OtherModel" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                    <Method Name="OnGet():System.Void" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                      <Statement FileIndex="2" Line="5" Covered="True" />
                     </Method>
                   </Type>
                 </Namespace>
@@ -63,6 +80,9 @@ public sealed class ExcelReportGenerationTests
             "*.g.cs;bin;obj"));
 
         Assert.IsTrue(File.Exists(result.OutputPath));
+        Assert.AreEqual(1, result.Report.Files.Count);
+        Assert.AreEqual(@"Pages\Index.cshtml.cs", result.Report.Files[0].RelativePath);
+        Assert.IsFalse(result.Report.Files.Any(file => file.RelativePath == @"Pages\Other.cshtml.cs"));
         using var workbook = new XLWorkbook(result.OutputPath);
         var worksheet = workbook.Worksheet("Coverage");
         Assert.AreEqual(0, worksheet.SheetView.SplitRow);

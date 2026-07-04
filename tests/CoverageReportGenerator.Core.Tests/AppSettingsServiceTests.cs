@@ -81,4 +81,41 @@ public sealed class AppSettingsServiceTests
 
         Assert.AreEqual(AppSettings.Defaults, settings);
     }
+
+    /// <summary>
+    /// 読込可能だが欠損や不正値を含む設定を既定値で補正することを検証する。
+    /// </summary>
+    [TestMethod]
+    public void Load_normalizes_missing_or_invalid_saved_values()
+    {
+        using var workspace = TestWorkspace.Create();
+        var path = workspace.Write("settings.json", """
+            {
+              "ProjectPath": null,
+              "DotCoverXmlPath": "coverage.xml",
+              "ScopePath": null,
+              "IncludePatterns": " ",
+              "ExcludePatterns": null,
+              "OutputDirectory": "reports",
+              "ReportTitle": null,
+              "ScopeType": 999,
+              "OpenAfterGeneration": false,
+              "OverwriteExisting": true
+            }
+            """);
+        var service = new AppSettingsService(path);
+
+        var settings = service.Load();
+
+        Assert.AreEqual(AppSettings.Defaults.ProjectPath, settings.ProjectPath);
+        Assert.AreEqual("coverage.xml", settings.DotCoverXmlPath);
+        Assert.AreEqual(AppSettings.Defaults.ScopePath, settings.ScopePath);
+        Assert.AreEqual(AppSettings.Defaults.IncludePatterns, settings.IncludePatterns);
+        Assert.AreEqual(AppSettings.Defaults.ExcludePatterns, settings.ExcludePatterns);
+        Assert.AreEqual("reports", settings.OutputDirectory);
+        Assert.AreEqual(AppSettings.Defaults.ReportTitle, settings.ReportTitle);
+        Assert.AreEqual(AppSettings.Defaults.ScopeType, settings.ScopeType);
+        Assert.IsFalse(settings.OpenAfterGeneration);
+        Assert.IsTrue(settings.OverwriteExisting);
+    }
 }

@@ -294,6 +294,64 @@ public sealed class ReportGenerationTests
     }
 
     /// <summary>
+    /// ファイル範囲が他ファイルのStatementを除外し、選択ファイルだけで集計されることを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task File_scope_report_includes_only_selected_file_in_summary_members_and_sources()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        var edit = workspace.Write(@"Pages\Admin\Edit.cshtml.cs", """
+            namespace Sample.Pages.Admin;
+            public class EditModel
+            {
+                public void OnPost()
+                {
+                    var x = 1;
+                }
+            }
+            """);
+        workspace.Write(@"Pages\Admin\Delete.cshtml.cs", """
+            namespace Sample.Pages.Admin;
+            public class DeleteModel
+            {
+                public void OnPost()
+                {
+                    var x = 1;
+                }
+            }
+            """);
+        var xml = """
+            <Root CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
+              <FileIndices>
+                <File Index="1" Name="Pages\Admin\Edit.cshtml.cs" />
+                <File Index="2" Name="Pages\Admin\Delete.cshtml.cs" />
+              </FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="Sample.Pages.Admin">
+                  <Type Name="EditModel"><Method Name="OnPost():System.Void"><Statement FileIndex="1" Line="6" Covered="False" /></Method></Type>
+                  <Type Name="DeleteModel"><Method Name="OnPost():System.Void"><Statement FileIndex="2" Line="6" Covered="True" /></Method></Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml, CoverageScopeType.File, edit);
+
+        Assert.AreEqual(1, report.Files.Count);
+        Assert.AreEqual(@"Pages\Admin\Edit.cshtml.cs", report.Files[0].RelativePath);
+        Assert.AreEqual(0, report.Summary.CoveredStatements);
+        Assert.AreEqual(1, report.Summary.TotalStatements);
+        Assert.AreEqual("OnPost", report.Members.Single().DisplayName);
+        Assert.AreEqual(LineCoverageStatus.Uncovered, report.Files[0].Lines.Single(line => line.LineNumber == 6).Status);
+        Assert.IsFalse(report.Files.Any(file => file.RelativePath == @"Pages\Admin\Delete.cshtml.cs"));
+    }
+
+    /// <summary>
     /// HTMLがランキング、ソースアンカー、現行タブ構成を出力することを検証する。
     /// </summary>
     [TestMethod]

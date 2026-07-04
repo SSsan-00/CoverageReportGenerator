@@ -52,6 +52,32 @@ public sealed class DotCoverDetailedXmlParserTests
     }
 
     /// <summary>
+    /// 誤記属性が混在しても正式なCovered属性だけを読むことを検証する。
+    /// </summary>
+    [TestMethod]
+    public void Parse_uses_covered_attribute_when_misspelled_coverd_attribute_exists()
+    {
+        const string xml = """
+            <Root>
+              <FileIndices><File Index="1" Name="Pages\Index.cshtml.cs" /></FileIndices>
+              <Assembly Name="Web">
+                <Namespace Name="Sample.Pages">
+                  <Type Name="IndexModel">
+                    <Method Name="OnGet():System.Void">
+                      <Statement FileIndex="1" Line="10" Covered="True" Coverd="False" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = new DotCoverDetailedXmlParser().Parse(xml);
+
+        Assert.IsTrue(report.Statements.Single().Covered);
+    }
+
+    /// <summary>
     /// Statementのソース範囲属性を読めることを検証する。
     /// </summary>
     [TestMethod]

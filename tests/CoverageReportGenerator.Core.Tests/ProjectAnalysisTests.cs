@@ -283,6 +283,7 @@ public sealed class ProjectAnalysisTests
 
         Assert.AreEqual(ProjectCacheStatus.Updated, third.CacheStatus);
         Assert.IsTrue(third.Members.Any(member => member.Name == "Run"));
+        Assert.IsTrue(third.Members.All(member => member.RelativePath == @"Pages\Index.cshtml.cs"));
     }
 
     /// <summary>
