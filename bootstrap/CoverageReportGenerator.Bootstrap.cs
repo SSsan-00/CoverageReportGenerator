@@ -94,7 +94,13 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
         ".vs",
         "bin",
         "obj",
-        "artifacts"
+        "artifacts",
+        "bootstrap",
+        "docs"
+    };
+    var excludedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        "README.md"
     };
 
     // 出力先配下を再帰コピー対象から外し、自己コピーを防ぐ。
@@ -120,7 +126,13 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
 
         foreach (var file in Directory.EnumerateFiles(currentSource))
         {
-            File.Copy(file, Path.Combine(currentTarget, Path.GetFileName(file)), overwrite: true);
+            var fileName = Path.GetFileName(file);
+            if (excludedFileNames.Contains(fileName))
+            {
+                continue;
+            }
+
+            File.Copy(file, Path.Combine(currentTarget, fileName), overwrite: true);
         }
     }
 }

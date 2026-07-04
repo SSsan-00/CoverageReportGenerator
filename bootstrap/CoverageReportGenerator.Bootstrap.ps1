@@ -78,7 +78,8 @@ function Copy-SourceTree {
         Remove-Item -LiteralPath $targetFullPath -Recurse -Force
     }
 
-    $excludedDirectoryNames = @(".git", ".vs", "bin", "obj", "artifacts")
+    $excludedDirectoryNames = @(".git", ".vs", "bin", "obj", "artifacts", "bootstrap", "docs")
+    $excludedFileNames = @("README.md")
     New-Item -ItemType Directory -Force -Path $targetFullPath | Out-Null
 
     function Copy-DirectoryContent {
@@ -102,6 +103,10 @@ function Copy-SourceTree {
                 $nextTarget = Join-Path $CurrentTarget $item.Name
                 New-Item -ItemType Directory -Force -Path $nextTarget | Out-Null
                 Copy-DirectoryContent -CurrentSource $item.FullName -CurrentTarget $nextTarget
+                continue
+            }
+
+            if ($excludedFileNames -contains $item.Name) {
                 continue
             }
 
