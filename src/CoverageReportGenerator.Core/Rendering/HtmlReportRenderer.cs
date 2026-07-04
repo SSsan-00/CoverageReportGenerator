@@ -37,7 +37,7 @@ public sealed class HtmlReportRenderer
     {
         var html = new StringBuilder();
         html.AppendLine("<!doctype html>");
-        html.AppendLine("<html lang=\"en\">");
+        html.AppendLine("<html lang=\"ja\">");
         html.AppendLine("<head>");
         html.AppendLine("<meta charset=\"utf-8\">");
         html.AppendLine("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">");
@@ -61,15 +61,15 @@ public sealed class HtmlReportRenderer
     {
         html.AppendLine("<header class=\"page-header\">");
         html.Append("<h1>").Append(E(report.ReportTitle)).AppendLine("</h1>");
-        html.Append("<div class=\"meta\">Project: ").Append(E(report.ProjectName))
-            .Append(" · Scope: ").Append(E(report.ScopeLabel))
-            .Append(" · Generated: ").Append(E(report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)))
+        html.Append("<div class=\"meta\">プロジェクト: ").Append(E(report.ProjectName))
+            .Append(" · 対象: ").Append(E(report.ScopeLabel))
+            .Append(" · 生成日時: ").Append(E(report.GeneratedAt.ToString("yyyy-MM-dd HH:mm:ss zzz", CultureInfo.InvariantCulture)))
             .AppendLine("</div>");
         html.AppendLine("<section class=\"summary-grid\">");
-        SummaryCard(html, "Coverage", $"{report.Summary.CoveragePercent:0.0}%");
-        SummaryCard(html, "Covered", report.Summary.CoveredStatements.ToString(CultureInfo.InvariantCulture));
-        SummaryCard(html, "Total", report.Summary.TotalStatements.ToString(CultureInfo.InvariantCulture));
-        SummaryCard(html, "Files", report.Files.Count.ToString(CultureInfo.InvariantCulture));
+        SummaryCoverageCard(html, "カバレッジ", report.Summary);
+        SummaryCard(html, "カバー済み", report.Summary.CoveredStatements.ToString(CultureInfo.InvariantCulture));
+        SummaryCard(html, "総数", report.Summary.TotalStatements.ToString(CultureInfo.InvariantCulture));
+        SummaryCard(html, "ファイル数", report.Files.Count.ToString(CultureInfo.InvariantCulture));
         html.AppendLine("</section>");
         html.AppendLine("</header>");
     }
@@ -80,10 +80,17 @@ public sealed class HtmlReportRenderer
             .Append(E(value)).AppendLine("</strong></div>");
     }
 
+    private static void SummaryCoverageCard(StringBuilder html, string label, CoverageSummary summary)
+    {
+        html.Append("<div class=\"summary-card summary-coverage\"><span>").Append(E(label)).Append("</span>");
+        CoverageVisual(html, summary);
+        html.AppendLine("</div>");
+    }
+
     private static void RenderTabs(StringBuilder html, CoverageReport report)
     {
         html.AppendLine("<nav class=\"tabs\">");
-        foreach (var (id, label) in new[] { ("summary", "Summary"), ("rankings", "Rankings"), ("members", "Members"), ("files", "Files"), ("source", "Source") })
+        foreach (var (id, label) in new[] { ("summary", "概要"), ("rankings", "ランキング"), ("members", "メンバー"), ("files", "ファイル"), ("source", "ソース") })
         {
             html.Append("<button type=\"button\" class=\"tab-button\" data-tab=\"").Append(id).Append("\">").Append(label).AppendLine("</button>");
         }
@@ -115,34 +122,36 @@ public sealed class HtmlReportRenderer
 
     private static void RenderSummary(StringBuilder html, CoverageReport report)
     {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Summary</h2></div>");
+        html.AppendLine("<div class=\"panel-heading\"><h2>概要</h2></div>");
         html.AppendLine("<table><tbody>");
-        Row(html, "Report", report.ReportTitle);
-        Row(html, "Project", report.ProjectName);
-        Row(html, "Project file", report.ProjectPath);
-        Row(html, "Scope", report.ScopeLabel);
-        Row(html, "Coverage", $"{report.Summary.CoveragePercent:0.0}%");
-        Row(html, "Statements", $"{report.Summary.CoveredStatements}/{report.Summary.TotalStatements}");
-        Row(html, "Target files", report.Files.Count.ToString(CultureInfo.InvariantCulture));
+        Row(html, "レポート", report.ReportTitle);
+        Row(html, "プロジェクト", report.ProjectName);
+        Row(html, "プロジェクトファイル", report.ProjectPath);
+        Row(html, "対象", report.ScopeLabel);
+        Row(html, "カバレッジ", Percent(report.Summary));
+        Row(html, "Statement", $"{report.Summary.CoveredStatements}/{report.Summary.TotalStatements}");
+        Row(html, "対象ファイル数", report.Files.Count.ToString(CultureInfo.InvariantCulture));
         html.AppendLine("</tbody></table>");
     }
 
     private static void RenderRankings(StringBuilder html, CoverageReport report)
     {
         html.AppendLine("<div class=\"rank-grid\">");
-        RankingTree(html, "Lowest Namespaces", report.Rankings.LowestNamespaces);
-        RankingTree(html, "Lowest Types", report.Rankings.LowestTypes);
-        RankingMembers(html, "Lowest Members", report.Rankings.LowestMembers);
-        RankingFiles(html, "Most Uncovered Files", report.Rankings.MostUncoveredFiles);
+        RankingTree(html, "低カバレッジ Namespace", report.Rankings.LowestNamespaces);
+        RankingTree(html, "低カバレッジ Type", report.Rankings.LowestTypes);
+        RankingMembers(html, "低カバレッジ メンバー", report.Rankings.LowestMembers);
+        RankingFiles(html, "未カバーが多いファイル", report.Rankings.MostUncoveredFiles);
         html.AppendLine("</div>");
     }
 
     private static void RankingTree(StringBuilder html, string title, IReadOnlyList<CoverageTreeItem> items)
     {
-        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>Coverage</th><th>Statements</th><th>Name</th></tr></thead><tbody>");
+        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>カバレッジ</th><th>Statement</th><th>名前</th></tr></thead><tbody>");
         foreach (var item in items)
         {
-            html.Append("<tr><td>").Append(Percent(item.Summary)).Append("</td><td>").Append(Statements(item.Summary)).Append("</td><td>")
+            html.Append("<tr class=\"coverage-row coverage-").Append(CoverageLevel(item.Summary)).Append("\"><td>");
+            CoverageVisual(html, item.Summary);
+            html.Append("</td><td>").Append(Statements(item.Summary)).Append("</td><td>")
                 .Append(E(item.Name)).AppendLine("</td></tr>");
         }
 
@@ -151,10 +160,12 @@ public sealed class HtmlReportRenderer
 
     private static void RankingMembers(StringBuilder html, string title, IReadOnlyList<MemberCoverageReport> items)
     {
-        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>Coverage</th><th>Statements</th><th>Member</th><th>File</th></tr></thead><tbody>");
+        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>カバレッジ</th><th>Statement</th><th>メンバー</th><th>ファイル</th></tr></thead><tbody>");
         foreach (var item in items)
         {
-            html.Append("<tr><td>").Append(Percent(item.Summary)).Append("</td><td>").Append(Statements(item.Summary)).Append("</td><td>");
+            html.Append("<tr class=\"coverage-row coverage-").Append(CoverageLevel(item.Summary)).Append("\"><td>");
+            CoverageVisual(html, item.Summary);
+            html.Append("</td><td>").Append(Statements(item.Summary)).Append("</td><td>");
             LinkToSource(html, item.FileId, item.StartLine, item.DisplayName);
             html.Append("</td><td>").Append(E(item.RelativePath)).AppendLine("</td></tr>");
         }
@@ -164,10 +175,12 @@ public sealed class HtmlReportRenderer
 
     private static void RankingFiles(StringBuilder html, string title, IReadOnlyList<FileCoverageReport> items)
     {
-        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>Uncovered</th><th>Coverage</th><th>File</th></tr></thead><tbody>");
+        html.Append("<section><h2>").Append(E(title)).AppendLine("</h2><table><thead><tr><th>未カバー</th><th>カバレッジ</th><th>ファイル</th></tr></thead><tbody>");
         foreach (var item in items)
         {
-            html.Append("<tr><td>").Append(item.Summary.UncoveredStatements).Append("</td><td>").Append(Percent(item.Summary)).Append("</td><td>");
+            html.Append("<tr class=\"coverage-row coverage-").Append(CoverageLevel(item.Summary)).Append("\"><td>").Append(item.Summary.UncoveredStatements).Append("</td><td>");
+            CoverageVisual(html, item.Summary);
+            html.Append("</td><td>");
             LinkToSource(html, item.FileId, 1, item.RelativePath);
             html.AppendLine("</td></tr>");
         }
@@ -177,11 +190,13 @@ public sealed class HtmlReportRenderer
 
     private static void RenderMembers(StringBuilder html, CoverageReport report)
     {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Members</h2><input class=\"filter\" placeholder=\"Filter members\" data-filter-table=\"members-table\"></div>");
-        html.AppendLine("<table id=\"members-table\"><thead><tr><th>Coverage</th><th>Statements</th><th>File</th><th>Type</th><th>Member</th><th>Kind</th><th>Lines</th></tr></thead><tbody>");
+        html.AppendLine("<div class=\"panel-heading\"><h2>メンバー</h2><input class=\"filter\" placeholder=\"メンバーを絞り込み\" data-filter-table=\"members-table\"></div>");
+        html.AppendLine("<table id=\"members-table\"><thead><tr><th>カバレッジ</th><th>Statement</th><th>ファイル</th><th>Type</th><th>メンバー</th><th>種別</th><th>行</th></tr></thead><tbody>");
         foreach (var member in report.Members)
         {
-            html.Append("<tr><td>").Append(Percent(member.Summary)).Append("</td><td>").Append(Statements(member.Summary)).Append("</td><td>")
+            html.Append("<tr class=\"coverage-row coverage-").Append(CoverageLevel(member.Summary)).Append("\"><td>");
+            CoverageVisual(html, member.Summary);
+            html.Append("</td><td>").Append(Statements(member.Summary)).Append("</td><td>")
                 .Append(E(member.RelativePath)).Append("</td><td>").Append(E(member.ContainingType)).Append("</td><td>");
             LinkToSource(html, member.FileId, member.StartLine, member.DisplayName);
             html.Append("</td><td>").Append(member.Kind).Append("</td><td>").Append(member.StartLine).Append("-").Append(member.EndLine).AppendLine("</td></tr>");
@@ -192,13 +207,15 @@ public sealed class HtmlReportRenderer
 
     private static void RenderFiles(StringBuilder html, CoverageReport report)
     {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Files</h2><input class=\"filter\" placeholder=\"Filter files\" data-filter-table=\"files-table\"></div>");
-        html.AppendLine("<table id=\"files-table\"><thead><tr><th>Coverage</th><th>Statements</th><th>File</th><th>Source</th></tr></thead><tbody>");
+        html.AppendLine("<div class=\"panel-heading\"><h2>ファイル</h2><input class=\"filter\" placeholder=\"ファイルを絞り込み\" data-filter-table=\"files-table\"></div>");
+        html.AppendLine("<table id=\"files-table\" class=\"files-table\"><thead><tr><th>カバレッジ</th><th>Statement</th><th>ファイル</th><th>ソース</th></tr></thead><tbody>");
         foreach (var file in report.Files)
         {
-            html.Append("<tr><td>").Append(Percent(file.Summary)).Append("</td><td>").Append(Statements(file.Summary)).Append("</td><td>");
+            html.Append("<tr class=\"coverage-row coverage-file-row coverage-").Append(CoverageLevel(file.Summary)).Append("\"><td>");
+            CoverageVisual(html, file.Summary);
+            html.Append("</td><td>").Append(Statements(file.Summary)).Append("</td><td>");
             LinkToSource(html, file.FileId, 1, file.RelativePath);
-            html.Append("</td><td>").Append(file.SourceFound ? "Found" : "Not found").AppendLine("</td></tr>");
+            html.Append("</td><td>").Append(file.SourceFound ? "あり" : "なし").AppendLine("</td></tr>");
         }
 
         html.AppendLine("</tbody></table>");
@@ -206,7 +223,7 @@ public sealed class HtmlReportRenderer
 
     private static void RenderSource(StringBuilder html, CoverageReport report)
     {
-        html.AppendLine("<div class=\"panel-heading\"><h2>Source</h2><input class=\"filter\" placeholder=\"Filter source files\" data-filter-details=\"source\"></div>");
+        html.AppendLine("<div class=\"panel-heading\"><h2>ソース</h2><input class=\"filter\" placeholder=\"ソースファイルを絞り込み\" data-filter-details=\"source\"></div>");
         var singleFile = report.Files.Count == 1;
         foreach (var file in report.Files)
         {
@@ -221,7 +238,7 @@ public sealed class HtmlReportRenderer
             html.AppendLine("<table class=\"source-table\"><tbody>");
             if (file.Lines.Count == 0)
             {
-                html.AppendLine("<tr><td colspan=\"3\">source file not found</td></tr>");
+                html.AppendLine("<tr><td colspan=\"3\">ソースファイルが見つかりません</td></tr>");
             }
             else
             {
@@ -252,12 +269,40 @@ public sealed class HtmlReportRenderer
 
     private static string Percent(CoverageSummary summary)
     {
-        return $"{summary.CoveragePercent:0.0}%";
+        return $"{summary.CoveragePercent:0.#}%";
     }
 
     private static string Statements(CoverageSummary summary)
     {
         return $"{summary.CoveredStatements}/{summary.TotalStatements}";
+    }
+
+    private static void CoverageVisual(StringBuilder html, CoverageSummary summary)
+    {
+        var percent = Percent(summary);
+        html.Append("<div class=\"coverage-visual coverage-").Append(CoverageLevel(summary)).Append("\" aria-label=\"カバレッジ ").Append(percent).Append("\">")
+            .Append("<div class=\"coverage-bar\"><span style=\"width:").Append(CoverageWidth(summary)).Append("%\"></span></div>")
+            .Append("<strong>").Append(percent).Append("</strong></div>");
+    }
+
+    private static string CoverageWidth(CoverageSummary summary)
+    {
+        return Math.Clamp(summary.CoveragePercent, 0m, 100m).ToString("0.###", CultureInfo.InvariantCulture);
+    }
+
+    private static string CoverageLevel(CoverageSummary summary)
+    {
+        if (summary.TotalStatements == 0)
+        {
+            return "none";
+        }
+
+        return summary.CoveragePercent switch
+        {
+            >= 80m => "good",
+            >= 50m => "warn",
+            _ => "bad"
+        };
     }
 
     private static string StatusClass(LineCoverageStatus status)
@@ -286,7 +331,7 @@ public sealed class HtmlReportRenderer
     }
 
     private const string Styles = """
-        :root { color-scheme: light; --ok:#d7f4dd; --bad:#ffdcdc; --muted:#f5f7fa; --ink:#1f2937; --line:#d7dde5; --accent:#2563eb; }
+        :root { color-scheme: light; --ok:#d7f4dd; --bad:#ffdcdc; --muted:#f5f7fa; --ink:#1f2937; --line:#d7dde5; --accent:#2563eb; --covered:#ABD98D; --empty:#E4E8EB; --warn:#f0c66a; --danger:#df7d7d; --none:#b8c0ca; }
         body { margin:0; color:var(--ink); font-family:Segoe UI, Arial, sans-serif; background:#ffffff; }
         .page-header { padding:20px 24px 12px; border-bottom:1px solid var(--line); background:#f9fafb; }
         h1 { margin:0 0 6px; font-size:24px; letter-spacing:0; }
@@ -296,6 +341,7 @@ public sealed class HtmlReportRenderer
         .summary-card { background:#fff; border:1px solid var(--line); border-radius:8px; padding:12px; }
         .summary-card span { display:block; font-size:12px; color:#536171; }
         .summary-card strong { display:block; font-size:22px; margin-top:3px; }
+        .summary-coverage .coverage-visual { margin-top:8px; }
         .tabs { position:sticky; top:0; z-index:10; display:flex; gap:4px; padding:8px 24px; border-bottom:1px solid var(--line); background:#fff; }
         .tab-button { border:1px solid var(--line); background:#fff; border-radius:6px; padding:8px 12px; cursor:pointer; }
         .tab-button.active { color:#fff; border-color:var(--accent); background:var(--accent); }
@@ -308,6 +354,19 @@ public sealed class HtmlReportRenderer
         table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); }
         th, td { border-bottom:1px solid var(--line); padding:7px 9px; text-align:left; vertical-align:top; font-size:13px; }
         th { background:#f3f6f9; color:#374151; font-weight:600; }
+        .coverage-visual { display:grid; grid-template-columns:minmax(96px,1fr) 52px; align-items:center; gap:8px; min-width:160px; }
+        .coverage-visual strong { margin:0; font-size:13px; text-align:right; font-variant-numeric:tabular-nums; }
+        .coverage-bar { height:12px; overflow:hidden; border:1px solid #cbd2da; border-radius:3px; background:var(--empty); box-shadow:inset 0 1px 0 rgba(255,255,255,.65); }
+        .coverage-bar span { display:block; height:100%; background:var(--covered); }
+        .coverage-warn .coverage-bar span { background:var(--warn); }
+        .coverage-bad .coverage-bar span { background:var(--danger); }
+        .coverage-none .coverage-bar span { background:var(--none); }
+        .coverage-row.coverage-good td:first-child { box-shadow:inset 4px 0 0 var(--covered); }
+        .coverage-row.coverage-warn td:first-child { box-shadow:inset 4px 0 0 var(--warn); }
+        .coverage-row.coverage-bad td:first-child { box-shadow:inset 4px 0 0 var(--danger); }
+        .coverage-row.coverage-none td:first-child { box-shadow:inset 4px 0 0 var(--none); }
+        .files-table th:first-child, .files-table td:first-child { width:230px; }
+        .files-table tbody tr:hover { background:#fbfdff; }
         a { color:var(--accent); text-decoration:none; }
         a:hover { text-decoration:underline; }
         details.source-file { margin:0 0 12px; border:1px solid var(--line); border-radius:8px; overflow:hidden; }

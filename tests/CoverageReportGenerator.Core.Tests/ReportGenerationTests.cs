@@ -59,11 +59,191 @@ public sealed class ReportGenerationTests
         Assert.AreEqual(1, report.Files.Count);
         var file = report.Files[0];
         Assert.AreEqual(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 5).Status);
-        Assert.AreEqual(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 6).Status);
+        Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 6).Status);
         Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 7).Status);
         Assert.AreEqual(LineCoverageStatus.NoData, file.Lines.Single(line => line.LineNumber == 8).Status);
         Assert.AreEqual(2, report.Summary.CoveredStatements);
         Assert.AreEqual(4, report.Summary.TotalStatements);
+    }
+
+    /// <summary>
+    /// プロジェクト全体の割合表示にRootのCoveragePercentを使うことを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Report_builder_uses_root_coverage_percent_for_project_summary()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Pages\Index.cshtml.cs", """
+            public class IndexModel
+            {
+                public void OnGet()
+                {
+                    var covered = 1;
+                }
+            }
+            """);
+        var xml = """
+            <Root CoveredStatements="1" TotalStatements="3" CoveragePercent="33">
+              <FileIndices><File Index="1" Name="Pages\Index.cshtml.cs" /></FileIndices>
+              <Assembly Name="Sample.Web" CoveredStatements="1" TotalStatements="3" CoveragePercent="33">
+                <Namespace Name="Sample.Pages" CoveredStatements="1" TotalStatements="3" CoveragePercent="33">
+                  <Type Name="IndexModel" CoveredStatements="1" TotalStatements="3" CoveragePercent="33">
+                    <Method Name="OnGet():System.Void" CoveredStatements="1" TotalStatements="3" CoveragePercent="33">
+                      <Statement FileIndex="1" Line="5" Covered="True" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+
+        Assert.AreEqual(1, report.Summary.CoveredStatements);
+        Assert.AreEqual(3, report.Summary.TotalStatements);
+        Assert.AreEqual(33, report.Summary.CoveragePercent);
+    }
+
+    /// <summary>
+    /// dotCover公式HTMLに合わせ、record主コンストラクタはソース行ハイライトから除外することを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Report_builder_does_not_highlight_record_primary_constructor_statement_lines()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Models\CheckoutRequest.cs", """
+            public sealed record CheckoutRequest(
+                int ProductId,
+                int Quantity,
+                string? CouponCode);
+            """);
+        var xml = """
+            <Root CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+              <FileIndices><File Index="1" Name="Models\CheckoutRequest.cs" /></FileIndices>
+              <Assembly Name="Sample.Web" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                <Namespace Name="Sample.Models" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                  <Type Name="CheckoutRequest" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                    <Method Name=".ctor(System.Int32,System.Int32,System.String):System.Void" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                      <Statement FileIndex="1" Line="1" Column="22" EndLine="4" EndColumn="26" Covered="True" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+
+        var file = report.Files.Single(item => item.RelativePath == @"Models\CheckoutRequest.cs");
+        Assert.AreEqual(1, file.Summary.CoveredStatements);
+        Assert.AreEqual(1, file.Summary.TotalStatements);
+        Assert.IsTrue(file.Lines.All(line => line.Status == LineCoverageStatus.NoData));
+    }
+
+    /// <summary>
+    /// Method集計値とStatement要素数が異なる場合にMethod集計値を優先することを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Report_builder_prefers_dotcover_method_metrics_when_statement_nodes_are_duplicated()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Pages\Products\Details.cshtml.cs", """
+            public class DetailsModel
+            {
+                public void OnGet()
+                {
+                    var items = new[] { 1, 2, 3 }
+                        .Where(item => item > 1)
+                        .ToList();
+                }
+            }
+            """);
+        var xml = """
+            <Root CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+              <FileIndices><File Index="1" Name="Pages\Products\Details.cshtml.cs" /></FileIndices>
+              <Assembly Name="Sample.Web" CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+                <Namespace Name="Sample.Pages.Products" CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+                  <Type Name="DetailsModel" CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+                    <Method Name="OnGet():System.Void" CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+                      <Statement FileIndex="1" Line="5" Column="21" EndLine="7" EndColumn="30" Covered="False" />
+                      <Statement FileIndex="1" Line="5" Column="21" EndLine="7" EndColumn="30" Covered="False" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+
+        Assert.AreEqual(0, report.Summary.CoveredStatements);
+        Assert.AreEqual(1, report.Summary.TotalStatements);
+        Assert.AreEqual(1, report.Files.Single().Summary.TotalStatements);
+        Assert.AreEqual(1, report.Tree.Single().Summary.TotalStatements);
+    }
+
+    /// <summary>
+    /// 複数行Statementの全行が同じカバレッジ状態になることを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Report_builder_marks_all_lines_in_multiline_dotcover_statement()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Pages\Checkout.cs", """
+            public class Checkout
+            {
+                public string Format()
+                {
+                    return string.Join(
+                        ",",
+                        new[] { "a", "b" });
+                }
+            }
+            """);
+        var xml = """
+            <Root CoveredStatements="0" TotalStatements="1" CoveragePercent="0">
+              <FileIndices><File Index="1" Name="Pages\Checkout.cs" /></FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="Sample.Pages">
+                  <Type Name="Checkout">
+                    <Method Name="Format():System.String">
+                      <Statement FileIndex="1" Line="5" Column="16" EndLine="7" EndColumn="39" Covered="False" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+
+        var file = report.Files.Single(item => item.RelativePath == @"Pages\Checkout.cs");
+        Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 5).Status);
+        Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 6).Status);
+        Assert.AreEqual(LineCoverageStatus.Uncovered, file.Lines.Single(line => line.LineNumber == 7).Status);
+        Assert.AreEqual(LineCoverageStatus.NoData, file.Lines.Single(line => line.LineNumber == 8).Status);
+        Assert.AreEqual(0, report.Summary.CoveredStatements);
+        Assert.AreEqual(1, report.Summary.TotalStatements);
     }
 
     /// <summary>
@@ -149,7 +329,10 @@ public sealed class ReportGenerationTests
 
         var html = new HtmlReportRenderer().Render(report);
 
-        StringAssert.Contains(html, "Lowest Members");
+        StringAssert.Contains(html, "低カバレッジ メンバー");
+        StringAssert.Contains(html, "coverage-file-row coverage-bad");
+        StringAssert.Contains(html, "coverage-visual coverage-bad");
+        StringAssert.Contains(html, "style=\"width:0%\"");
         StringAssert.Contains(html, "src-file-1-line-6");
         StringAssert.Contains(html, "jumpToSource(1, 4)");
         Assert.IsFalse(html.Contains("Partial", StringComparison.OrdinalIgnoreCase));

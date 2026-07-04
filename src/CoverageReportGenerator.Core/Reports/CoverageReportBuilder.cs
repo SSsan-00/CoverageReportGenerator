@@ -1,6 +1,8 @@
 using CoverageReportGenerator.Core.DotCover;
 using CoverageReportGenerator.Core.Projects;
 using CoverageReportGenerator.Core.Utilities;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace CoverageReportGenerator.Core.Reports;
 
@@ -45,7 +47,7 @@ public sealed class CoverageReportBuilder
 
         var files = BuildFileReports(targetSelection.IncludedFiles, statements, fileIds);
         var tree = BuildTree(request.Project.ProjectName, statements, memberReports);
-        var summary = new CoverageSummary(statements.Count(statement => statement.Covered), statements.Count);
+        var summary = BuildOverallSummary(request.DotCover, statements);
 
         return new CoverageReport(
             string.IsNullOrWhiteSpace(request.ReportTitle) ? $"{request.Project.ProjectName} Coverage Report" : request.ReportTitle,
@@ -97,11 +99,14 @@ public sealed class CoverageReportBuilder
             matched.FullPath,
             matched.RelativePath,
             statement.Line,
+            statement.EndLine ?? statement.Line,
             statement.Covered,
             statement.AssemblyName,
             statement.NamespaceName,
             statement.TypeName,
-            statement.MethodName);
+            statement.MethodName,
+            statement.MethodKey,
+            statement.MethodMetric);
     }
 
     private static SourceFile? MatchTargetPath(string fullPath, string projectRoot, IReadOnlyList<SourceFile> targetFiles)
@@ -138,7 +143,7 @@ public sealed class CoverageReportBuilder
                 fileIds[PathUtilities.NormalizeFullPath(file.FullPath)],
                 file.FullPath,
                 file.RelativePath,
-                new CoverageSummary(fileStatements.Count(statement => statement.Covered), fileStatements.Count),
+                SummaryFromDistinctMethods(fileStatements),
                 lines,
                 File.Exists(file.FullPath)));
         }
@@ -153,9 +158,7 @@ public sealed class CoverageReportBuilder
             return [];
         }
 
-        var statementByLine = statements
-            .GroupBy(statement => statement.Line)
-            .ToDictionary(group => group.Key, group => group.ToList());
+        var statementByLine = BuildStatementsByLine(FilterSourceDisplayStatements(fullPath, statements));
         var sourceLines = SourceTextReader.ReadAllLines(fullPath);
         var lines = new List<LineCoverageReport>(sourceLines.Length);
         for (var i = 0; i < sourceLines.Length; i++)
@@ -164,16 +167,75 @@ public sealed class CoverageReportBuilder
             var status = LineCoverageStatus.NoData;
             if (statementByLine.TryGetValue(lineNumber, out var lineStatements))
             {
-                // 同一行にCovered/Uncoveredが混在する場合も、表示状態はCoveredへ寄せる。
-                status = lineStatements.Any(statement => statement.Covered)
-                    ? LineCoverageStatus.Covered
-                    : LineCoverageStatus.Uncovered;
+                // dotCover公式HTMLは同一行に未カバー範囲が含まれる場合、その行を未カバーとして目視できる。
+                status = lineStatements.Any(statement => !statement.Covered)
+                    ? LineCoverageStatus.Uncovered
+                    : LineCoverageStatus.Covered;
             }
 
             lines.Add(new LineCoverageReport(lineNumber, sourceLines[i], status));
         }
 
         return lines;
+    }
+
+    private static IReadOnlyList<ResolvedStatement> FilterSourceDisplayStatements(string fullPath, IReadOnlyList<ResolvedStatement> statements)
+    {
+        var recordPrimaryConstructorRanges = GetRecordPrimaryConstructorRanges(fullPath);
+        if (recordPrimaryConstructorRanges.Count == 0)
+        {
+            return statements;
+        }
+
+        return statements
+            .Where(statement => !recordPrimaryConstructorRanges.Any(range => statement.Line == range.StartLine && statement.EndLine <= range.EndLine))
+            .ToList();
+    }
+
+    private static IReadOnlyList<SourceLineRange> GetRecordPrimaryConstructorRanges(string fullPath)
+    {
+        if (!Path.GetExtension(fullPath).Equals(".cs", StringComparison.OrdinalIgnoreCase) || !File.Exists(fullPath))
+        {
+            return [];
+        }
+
+        var text = SourceTextReader.ReadAllText(fullPath);
+        var tree = CSharpSyntaxTree.ParseText(text);
+        var root = tree.GetRoot();
+        return root.DescendantNodes()
+            .OfType<RecordDeclarationSyntax>()
+            .Where(record => record.ParameterList is not null)
+            .Select(record =>
+            {
+                var identifierSpan = record.SyntaxTree.GetLineSpan(record.Identifier.Span);
+                var declarationSpan = record.SyntaxTree.GetLineSpan(record.Span);
+                return new SourceLineRange(
+                    identifierSpan.StartLinePosition.Line + 1,
+                    declarationSpan.EndLinePosition.Line + 1);
+            })
+            .ToList();
+    }
+
+    private static Dictionary<int, List<ResolvedStatement>> BuildStatementsByLine(IReadOnlyList<ResolvedStatement> statements)
+    {
+        var result = new Dictionary<int, List<ResolvedStatement>>();
+        foreach (var statement in statements)
+        {
+            var startLine = Math.Max(1, statement.Line);
+            var endLine = Math.Max(startLine, statement.EndLine);
+            for (var lineNumber = startLine; lineNumber <= endLine; lineNumber++)
+            {
+                if (!result.TryGetValue(lineNumber, out var lineStatements))
+                {
+                    lineStatements = [];
+                    result.Add(lineNumber, lineStatements);
+                }
+
+                lineStatements.Add(statement);
+            }
+        }
+
+        return result;
     }
 
     private static IReadOnlyList<MemberCoverageReport> BuildMemberReports(
@@ -196,7 +258,7 @@ public sealed class CoverageReportBuilder
             statementsByFile.TryGetValue(fullPath, out var fileStatements);
             fileStatements ??= [];
             var memberStatements = fileStatements
-                .Where(statement => statement.Line >= member.StartLine && statement.Line <= member.EndLine)
+                .Where(statement => statement.Line <= member.EndLine && statement.EndLine >= member.StartLine)
                 .ToList();
 
             if (memberStatements.Count == 0)
@@ -216,7 +278,7 @@ public sealed class CoverageReportBuilder
                 member.DisplaySignature,
                 member.StartLine,
                 member.EndLine,
-                new CoverageSummary(memberStatements.Count(statement => statement.Covered), memberStatements.Count),
+                SummaryFromDistinctMethods(memberStatements),
                 memberStatements.Select(statement => statement.MethodName).Distinct(StringComparer.Ordinal).Order().ToList()));
         }
 
@@ -273,8 +335,8 @@ public sealed class CoverageReportBuilder
         {
             var memberStatements = statements
                 .Where(statement => PathUtilities.PathComparer.Equals(statement.FullPath, member.FilePath)
-                    && statement.Line >= member.StartLine
-                    && statement.Line <= member.EndLine)
+                    && statement.Line <= member.EndLine
+                    && statement.EndLine >= member.StartLine)
                 .ToList();
             if (memberStatements.Count == 0)
             {
@@ -319,9 +381,54 @@ public sealed class CoverageReportBuilder
             kind,
             name,
             depth,
-            new CoverageSummary(materialized.Count(statement => statement.Covered), materialized.Count),
+            SummaryFromDistinctMethods(materialized),
             fileId,
             startLine);
+    }
+
+    private static CoverageSummary SummaryFromDistinctMethods(IReadOnlyList<ResolvedStatement> statements)
+    {
+        var covered = 0;
+        var total = 0;
+        var metricGroups = statements
+            .Where(HasUsableMethodMetric)
+            .GroupBy(statement => statement.MethodKey, StringComparer.Ordinal)
+            .ToList();
+        var metricKeys = metricGroups.Select(group => group.Key).ToHashSet(StringComparer.Ordinal);
+
+        foreach (var group in metricGroups)
+        {
+            var metric = group.First().MethodMetric!;
+            covered += metric.CoveredStatements;
+            total += metric.TotalStatements;
+        }
+
+        foreach (var statement in statements.Where(statement => statement.MethodKey is null || !metricKeys.Contains(statement.MethodKey)))
+        {
+            if (statement.Covered)
+            {
+                covered++;
+            }
+
+            total++;
+        }
+
+        return new CoverageSummary(covered, total);
+    }
+
+    private static CoverageSummary BuildOverallSummary(DotCoverReport dotCover, IReadOnlyList<ResolvedStatement> statements)
+    {
+        if (dotCover.Root.TotalStatements > 0 && statements.Count == dotCover.Statements.Count)
+        {
+            return new CoverageSummary(dotCover.Root.CoveredStatements, dotCover.Root.TotalStatements, dotCover.Root.CoveragePercent);
+        }
+
+        return SummaryFromDistinctMethods(statements);
+    }
+
+    private static bool HasUsableMethodMetric(ResolvedStatement statement)
+    {
+        return !string.IsNullOrWhiteSpace(statement.MethodKey) && statement.MethodMetric?.TotalStatements > 0;
     }
 
     private static CoverageRankings BuildRankings(
@@ -359,10 +466,10 @@ public sealed class CoverageReportBuilder
     {
         return selection.ScopeType switch
         {
-            CoverageScopeType.Project => "Project",
-            CoverageScopeType.Folder when !string.IsNullOrWhiteSpace(selection.ScopePath) => $"Folder: {PathUtilities.GetRelativePath(projectRoot, selection.ScopePath)}",
-            CoverageScopeType.File when !string.IsNullOrWhiteSpace(selection.ScopePath) => $"File: {PathUtilities.GetRelativePath(projectRoot, selection.ScopePath)}",
-            _ => "Project"
+            CoverageScopeType.Project => "プロジェクト全体",
+            CoverageScopeType.Folder when !string.IsNullOrWhiteSpace(selection.ScopePath) => $"フォルダ: {PathUtilities.GetRelativePath(projectRoot, selection.ScopePath)}",
+            CoverageScopeType.File when !string.IsNullOrWhiteSpace(selection.ScopePath) => $"ファイル: {PathUtilities.GetRelativePath(projectRoot, selection.ScopePath)}",
+            _ => "プロジェクト全体"
         };
     }
 
@@ -370,9 +477,14 @@ public sealed class CoverageReportBuilder
         string FullPath,
         string RelativePath,
         int Line,
+        int EndLine,
         bool Covered,
         string AssemblyName,
         string NamespaceName,
         string TypeName,
-        string MethodName);
+        string MethodName,
+        string? MethodKey,
+        CoverageMetric? MethodMetric);
+
+    private sealed record SourceLineRange(int StartLine, int EndLine);
 }

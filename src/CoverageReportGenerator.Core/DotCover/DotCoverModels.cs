@@ -24,7 +24,7 @@ public sealed record DotCoverFileIndex(
     string Name);
 
 /// <summary>
-/// dotCover XML内のStatement要素と所属階層。
+/// dotCover XML内のStatement要素、ソース範囲、所属階層。
 /// </summary>
 public sealed record DotCoverStatement(
     string FileIndex,
@@ -33,7 +33,12 @@ public sealed record DotCoverStatement(
     string AssemblyName,
     string NamespaceName,
     string TypeName,
-    string MethodName);
+    string MethodName,
+    int? Column = null,
+    int? EndLine = null,
+    int? EndColumn = null,
+    string? MethodKey = null,
+    CoverageMetric? MethodMetric = null);
 
 /// <summary>
 /// dotCover XMLを解析できない場合の例外。

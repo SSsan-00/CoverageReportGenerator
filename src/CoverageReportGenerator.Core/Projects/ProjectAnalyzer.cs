@@ -60,7 +60,7 @@ public sealed class ProjectAnalyzer
                 continue;
             }
 
-            progress?.Report(new ProjectAnalysisProgress($"Analyzing {file.RelativePath}"));
+            progress?.Report(new ProjectAnalysisProgress($"解析中: {file.RelativePath}"));
             if (file.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase))
             {
                 changedMembers.AddRange(await _memberParser.ParseFileAsync(file.FullPath, cancellationToken));

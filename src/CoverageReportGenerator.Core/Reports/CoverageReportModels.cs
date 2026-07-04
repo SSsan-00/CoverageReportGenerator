@@ -62,7 +62,8 @@ public sealed record CoverageReport(
 /// </summary>
 public sealed record CoverageSummary(
     int CoveredStatements,
-    int TotalStatements)
+    int TotalStatements,
+    decimal? CoveragePercentOverride = null)
 {
     /// <summary>
     /// 未カバーStatement数。
@@ -72,7 +73,7 @@ public sealed record CoverageSummary(
     /// <summary>
     /// 小数1桁のカバレッジ率。
     /// </summary>
-    public decimal CoveragePercent => TotalStatements == 0 ? 0 : decimal.Round(CoveredStatements * 100m / TotalStatements, 1);
+    public decimal CoveragePercent => CoveragePercentOverride ?? (TotalStatements == 0 ? 0 : decimal.Round(CoveredStatements * 100m / TotalStatements, 1));
 }
 
 /// <summary>

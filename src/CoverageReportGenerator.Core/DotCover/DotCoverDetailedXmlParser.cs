@@ -75,9 +75,14 @@ public sealed class DotCoverDetailedXmlParser
             throw new DotCoverParseException("DotCover XML must contain FileIndices/File elements.");
         }
 
+        var methodKeys = root.Descendants()
+            .Where(element => element.Name.LocalName == "Method")
+            .Select((element, index) => (Element: element, Key: $"method-{index + 1}"))
+            .ToDictionary(item => item.Element, item => item.Key);
+
         var statements = root.Descendants()
             .Where(element => element.Name.LocalName == "Statement")
-            .Select(ParseStatement)
+            .Select(element => ParseStatement(element, methodKeys))
             .ToList();
 
         return new DotCoverReport(ParseMetric(root), fileIndices, statements);
@@ -90,7 +95,7 @@ public sealed class DotCoverDetailedXmlParser
         return new DotCoverFileIndex(index, name);
     }
 
-    private static DotCoverStatement ParseStatement(XElement element)
+    private static DotCoverStatement ParseStatement(XElement element, IReadOnlyDictionary<XElement, string> methodKeys)
     {
         var fileIndex = RequiredAttribute(element, "FileIndex");
         var lineText = RequiredAttribute(element, "Line");
@@ -106,6 +111,15 @@ public sealed class DotCoverDetailedXmlParser
             throw new DotCoverParseException($"Statement Covered must be True or False. Actual value: '{coveredText}'.");
         }
 
+        var endLine = OptionalPositiveInt(element, "EndLine") ?? line;
+        if (endLine < line)
+        {
+            throw new DotCoverParseException($"Statement EndLine must be greater than or equal to Line. Line: '{line}', EndLine: '{endLine}'.");
+        }
+
+        var method = FindAncestor(element, "Method");
+        var methodKey = method is not null && methodKeys.TryGetValue(method, out var key) ? key : null;
+
         return new DotCoverStatement(
             fileIndex,
             line,
@@ -113,7 +127,12 @@ public sealed class DotCoverDetailedXmlParser
             FindAncestorName(element, "Assembly", "Unknown Assembly"),
             FindAncestorName(element, "Namespace", "Unknown Namespace"),
             FindAncestorName(element, "Type", "Unknown Type"),
-            FindAncestorName(element, "Method", "Unknown Method"));
+            FindAncestorName(element, "Method", "Unknown Method"),
+            OptionalPositiveInt(element, "Column"),
+            endLine,
+            OptionalPositiveInt(element, "EndColumn"),
+            methodKey,
+            method is null ? null : ParseMetric(method));
     }
 
     private static CoverageMetric ParseMetric(XElement element)
@@ -137,17 +156,38 @@ public sealed class DotCoverDetailedXmlParser
 
     private static string FindAncestorName(XElement element, string ancestorLocalName, string fallback)
     {
-        var match = element.Ancestors()
-            .FirstOrDefault(ancestor => ancestor.Name.LocalName == ancestorLocalName);
+        var match = FindAncestor(element, ancestorLocalName);
 
         var value = match?.Attribute("Name")?.Value;
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
+    }
+
+    private static XElement? FindAncestor(XElement element, string ancestorLocalName)
+    {
+        return element.Ancestors()
+            .FirstOrDefault(ancestor => ancestor.Name.LocalName == ancestorLocalName);
     }
 
     private static int OptionalInt(XElement element, string name)
     {
         var value = element.Attribute(name)?.Value;
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) ? result : 0;
+    }
+
+    private static int? OptionalPositiveInt(XElement element, string name)
+    {
+        var value = element.Attribute(name)?.Value;
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var result) || result < 1)
+        {
+            throw new DotCoverParseException($"Statement {name} must be a positive integer. Actual value: '{value}'.");
+        }
+
+        return result;
     }
 
     private static decimal? OptionalDecimal(XElement element, string name)

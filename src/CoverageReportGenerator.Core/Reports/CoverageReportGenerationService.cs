@@ -47,16 +47,16 @@ public sealed class CoverageReportGenerationService
     {
         Validate(options);
 
-        progress?.Report("Loading project");
+        progress?.Report("プロジェクトを読み込み中");
         var analysis = await _projectAnalyzer.AnalyzeAsync(
             options.ProjectPath,
             new Progress<ProjectAnalysisProgress>(item => progress?.Report(item.Message)),
             cancellationToken);
 
-        progress?.Report("Loading DotCover XML");
+        progress?.Report("DotCover XMLを読み込み中");
         var dotCover = _dotCoverParser.ParseFile(options.DotCoverXmlPath);
 
-        progress?.Report("Building report model");
+        progress?.Report("レポートモデルを作成中");
         var report = _reportBuilder.Build(new CoverageReportRequest(
             analysis,
             dotCover,
@@ -65,7 +65,7 @@ public sealed class CoverageReportGenerationService
             DateTimeOffset.Now));
 
         var outputPath = ResolveOutputPath(options, analysis.ProjectName);
-        progress?.Report($"Writing {outputPath}");
+        progress?.Report($"HTMLを書き出し中: {outputPath}");
         _renderer.RenderToFile(report, outputPath);
 
         return new CoverageReportGenerationResult(outputPath, report, analysis.CacheStatus);

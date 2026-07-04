@@ -45,8 +45,41 @@ public sealed class DotCoverDetailedXmlParserTests
         Assert.AreEqual(@"Pages\Index.cshtml.cs", report.Files[0].Name);
         Assert.AreEqual(3, report.Statements.Count);
         Assert.AreEqual("OnGetAsync():System.Threading.Tasks.Task", report.Statements[0].MethodName);
+        Assert.IsFalse(string.IsNullOrWhiteSpace(report.Statements[0].MethodKey));
+        Assert.AreEqual(1, report.Statements[0].MethodMetric?.TotalStatements);
         Assert.AreEqual("<OnPostAsync>d__4.MoveNext():System.Void", report.Statements[1].MethodName);
         Assert.AreEqual("Sample.Pages", report.Statements[2].NamespaceName);
+    }
+
+    /// <summary>
+    /// Statementのソース範囲属性を読めることを検証する。
+    /// </summary>
+    [TestMethod]
+    public void Parse_reads_statement_source_span_attributes()
+    {
+        const string xml = """
+            <Root>
+              <FileIndices><File Index="1" Name="Models\CheckoutRequest.cs" /></FileIndices>
+              <Assembly Name="Web">
+                <Namespace Name="Sample.Models">
+                  <Type Name="CheckoutRequest">
+                    <Method Name=".ctor(System.Int32,System.Int32):System.Void">
+                      <Statement FileIndex="1" Line="6" Column="22" EndLine="12" EndColumn="26" Covered="False" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = new DotCoverDetailedXmlParser().Parse(xml);
+
+        var statement = report.Statements.Single();
+        Assert.AreEqual(6, statement.Line);
+        Assert.AreEqual(22, statement.Column);
+        Assert.AreEqual(12, statement.EndLine);
+        Assert.AreEqual(26, statement.EndColumn);
+        Assert.IsFalse(statement.Covered);
     }
 
     /// <summary>

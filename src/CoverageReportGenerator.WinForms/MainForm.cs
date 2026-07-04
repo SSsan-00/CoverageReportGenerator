@@ -18,17 +18,18 @@ public sealed class MainForm : Form
     private readonly TextBox _excludePatterns = new() { Text = "*.g.cs;*.generated.cs;*.Designer.cs;bin;obj" };
     private readonly TextBox _outputDirectory = new();
     private readonly TextBox _reportTitle = new();
-    private readonly RadioButton _projectScope = new() { Text = "Project", Checked = true };
-    private readonly RadioButton _folderScope = new() { Text = "Folder" };
-    private readonly RadioButton _fileScope = new() { Text = "File" };
-    private readonly CheckBox _openAfterGeneration = new() { Text = "Open report after generation", Checked = true, AutoSize = true };
-    private readonly CheckBox _overwriteExisting = new() { Text = "Overwrite existing report", AutoSize = true };
-    private readonly Label _projectStatus = new() { AutoSize = true, Text = "Project: not loaded" };
-    private readonly Label _previewStatus = new() { AutoSize = true, Text = "Target Preview" };
+    private readonly RadioButton _projectScope = new() { Text = "プロジェクト", Checked = true };
+    private readonly RadioButton _folderScope = new() { Text = "フォルダ" };
+    private readonly RadioButton _fileScope = new() { Text = "ファイル" };
+    private readonly CheckBox _openAfterGeneration = new() { Text = "生成後に開く", Checked = true, AutoSize = true };
+    private readonly CheckBox _overwriteExisting = new() { Text = "既存ファイルを上書き", AutoSize = true };
+    private readonly Label _projectStatus = new() { AutoSize = true, Text = "プロジェクト: 未読込" };
+    private readonly Label _previewStatus = new() { AutoSize = true, Text = "対象プレビュー" };
     private readonly DataGridView _previewGrid = new();
     private readonly RichTextBox _log = new() { ReadOnly = true, BorderStyle = BorderStyle.None };
-    private readonly Button _resetButton = new() { Text = "Reset", Height = 36 };
-    private readonly Button _generateButton = new() { Text = "Generate Report", Height = 36 };
+    private readonly Button _resetButton = new() { Text = "初期化", Height = 36 };
+    private readonly Button _excelButton = new() { Text = "Excel出力", Height = 36 };
+    private readonly Button _generateButton = new() { Text = "HTML生成", Height = 36 };
 
     private ProjectAnalysis? _analysis;
 
@@ -85,25 +86,31 @@ public sealed class MainForm : Form
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 100));
         panel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
 
-        AddPathRow(panel, "Project", _projectPath, "Browse", BrowseProjectAsync, "Reload", ReloadProjectAsync);
+        AddPathRow(panel, "プロジェクト", _projectPath, "選択", BrowseProjectAsync, "再読込", ReloadProjectAsync);
         panel.Controls.Add(_projectStatus, 1, panel.RowCount++);
-        AddPathRow(panel, "DotCover XML", _xmlPath, "Browse", BrowseXml, null, null);
+        AddPathRow(panel, "DotCover XML", _xmlPath, "選択", BrowseXml, null, null);
         AddScopeRow(panel);
-        AddPathRow(panel, "Scope path", _scopePath, "Browse", BrowseScope, null, null);
+        AddPathRow(panel, "対象パス", _scopePath, "選択", BrowseScope, null, null);
         AddTextRow(panel, "Include", _includePatterns);
         AddTextRow(panel, "Exclude", _excludePatterns);
-        AddPathRow(panel, "Output", _outputDirectory, "Browse", BrowseOutput, null, null);
-        AddTextRow(panel, "Report title", _reportTitle);
+        AddPathRow(panel, "出力先", _outputDirectory, "選択", BrowseOutput, null, null);
+        AddTextRow(panel, "レポート名", _reportTitle);
 
         var options = new FlowLayoutPanel { FlowDirection = FlowDirection.LeftToRight, Dock = DockStyle.Fill, AutoSize = true };
         options.Controls.Add(_openAfterGeneration);
         options.Controls.Add(_overwriteExisting);
         panel.Controls.Add(new Label(), 0, panel.RowCount);
         panel.Controls.Add(options, 1, panel.RowCount);
+        var actions = new FlowLayoutPanel { FlowDirection = FlowDirection.RightToLeft, Dock = DockStyle.Fill, AutoSize = true };
         _resetButton.Click += (_, _) => ResetToDefaultSettings();
-        panel.Controls.Add(_resetButton, 2, panel.RowCount);
+        _excelButton.Click += async (_, _) => await ExportExcelAsync();
         _generateButton.Click += async (_, _) => await GenerateAsync();
-        panel.Controls.Add(_generateButton, 3, panel.RowCount++);
+        actions.Controls.Add(_generateButton);
+        actions.Controls.Add(_excelButton);
+        actions.Controls.Add(_resetButton);
+        panel.Controls.Add(actions, 2, panel.RowCount);
+        panel.SetColumnSpan(actions, 2);
+        panel.RowCount++;
 
         return panel;
     }
@@ -129,11 +136,11 @@ public sealed class MainForm : Form
         _previewGrid.RowHeadersVisible = false;
         _previewGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _previewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        _previewGrid.Columns.Add("Included", "Included");
-        _previewGrid.Columns.Add("Coverage", "Coverage");
-        _previewGrid.Columns.Add("Members", "Members");
-        _previewGrid.Columns.Add("Path", "Path");
-        _previewGrid.Columns.Add("Reason", "Reason");
+        _previewGrid.Columns.Add("Included", "対象");
+        _previewGrid.Columns.Add("Coverage", "カバレッジ");
+        _previewGrid.Columns.Add("Members", "メンバー");
+        _previewGrid.Columns.Add("Path", "パス");
+        _previewGrid.Columns.Add("Reason", "理由");
         _previewGrid.Columns["Included"]!.FillWeight = 14;
         _previewGrid.Columns["Coverage"]!.FillWeight = 18;
         _previewGrid.Columns["Members"]!.FillWeight = 14;
@@ -146,7 +153,7 @@ public sealed class MainForm : Form
     private Control BuildLogPanel()
     {
         var tabs = new TabControl { Dock = DockStyle.Fill };
-        var logPage = new TabPage("Log");
+        var logPage = new TabPage("ログ");
         _log.Dock = DockStyle.Fill;
         logPage.Controls.Add(_log);
         tabs.TabPages.Add(logPage);
@@ -208,14 +215,14 @@ public sealed class MainForm : Form
         _folderScope.CheckedChanged += (_, _) => RefreshPreview();
         _fileScope.CheckedChanged += (_, _) => RefreshPreview();
 
-        panel.Controls.Add(new Label { Text = "Scope", AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 0) }, 0, row);
+        panel.Controls.Add(new Label { Text = "対象範囲", AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 0) }, 0, row);
         panel.Controls.Add(group, 1, row);
         panel.SetColumnSpan(group, 3);
     }
 
     private async Task BrowseProjectAsync()
     {
-        using var dialog = new OpenFileDialog { Filter = "C# project (*.csproj)|*.csproj", Title = "Select .csproj" };
+        using var dialog = new OpenFileDialog { Filter = "C# project (*.csproj)|*.csproj", Title = ".csprojを選択" };
         if (dialog.ShowDialog(this) != DialogResult.OK)
         {
             return;
@@ -229,7 +236,7 @@ public sealed class MainForm : Form
 
         if (string.IsNullOrWhiteSpace(_reportTitle.Text))
         {
-            _reportTitle.Text = $"{Path.GetFileNameWithoutExtension(dialog.FileName)} Coverage Report";
+            _reportTitle.Text = $"{Path.GetFileNameWithoutExtension(dialog.FileName)} カバレッジレポート";
         }
 
         await LoadProjectAsync();
@@ -244,29 +251,29 @@ public sealed class MainForm : Form
     {
         if (!Path.GetExtension(_projectPath.Text).Equals(".csproj", StringComparison.OrdinalIgnoreCase))
         {
-            Log("Select a .csproj file before loading the project.");
+            Log(".csprojファイルを選択してから読み込んでください。");
             return;
         }
 
         if (!File.Exists(_projectPath.Text))
         {
-            Log("Project file was not found.");
+            Log("プロジェクトファイルが見つかりません。");
             return;
         }
 
         try
         {
             SetBusy(true);
-            Log("Loading project");
+            Log("プロジェクトを読み込み中");
             var analyzer = new ProjectAnalyzer();
             _analysis = await analyzer.AnalyzeAsync(_projectPath.Text, new Progress<ProjectAnalysisProgress>(item => Log(item.Message)));
-            _projectStatus.Text = $"Project: {_analysis.ProjectName} · Files: {_analysis.SourceFiles.Count} · Members: {_analysis.Members.Count} · Cache: {_analysis.CacheStatus}";
-            Log($"Project loaded. Cache: {_analysis.CacheStatus}");
+            _projectStatus.Text = $"プロジェクト: {_analysis.ProjectName} · ファイル: {_analysis.SourceFiles.Count} · メンバー: {_analysis.Members.Count} · キャッシュ: {_analysis.CacheStatus}";
+            Log($"プロジェクトを読み込みました。キャッシュ: {_analysis.CacheStatus}");
             RefreshPreview();
         }
         catch (Exception ex)
         {
-            Log($"Error: {ex.Message}");
+            Log($"エラー: {ex.Message}");
         }
         finally
         {
@@ -284,7 +291,7 @@ public sealed class MainForm : Form
 
     private Task BrowseXml()
     {
-        using var dialog = new OpenFileDialog { Filter = "XML files (*.xml)|*.xml|All files (*.*)|*.*", Title = "Select DotCover XML" };
+        using var dialog = new OpenFileDialog { Filter = "XMLファイル (*.xml)|*.xml|すべてのファイル (*.*)|*.*", Title = "DotCover XMLを選択" };
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             _xmlPath.Text = dialog.FileName;
@@ -297,7 +304,7 @@ public sealed class MainForm : Form
     {
         if (_fileScope.Checked)
         {
-            using var dialog = new OpenFileDialog { Filter = "Source files (*.cs;*.cshtml)|*.cs;*.cshtml|All files (*.*)|*.*", Title = "Select source file" };
+            using var dialog = new OpenFileDialog { Filter = "ソースファイル (*.cs;*.cshtml)|*.cs;*.cshtml|すべてのファイル (*.*)|*.*", Title = "対象ソースファイルを選択" };
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
                 _scopePath.Text = dialog.FileName;
@@ -305,7 +312,7 @@ public sealed class MainForm : Form
         }
         else
         {
-            using var dialog = new FolderBrowserDialog { Description = "Select folder scope" };
+            using var dialog = new FolderBrowserDialog { Description = "対象フォルダを選択" };
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
                 _scopePath.Text = dialog.SelectedPath;
@@ -319,7 +326,7 @@ public sealed class MainForm : Form
 
     private Task BrowseOutput()
     {
-        using var dialog = new FolderBrowserDialog { Description = "Select output folder" };
+        using var dialog = new FolderBrowserDialog { Description = "出力先フォルダを選択" };
         if (dialog.ShowDialog(this) == DialogResult.OK)
         {
             _outputDirectory.Text = dialog.SelectedPath;
@@ -347,7 +354,7 @@ public sealed class MainForm : Form
                 _excludePatterns.Text,
                 _overwriteExisting.Checked), new Progress<string>(Log));
 
-            Log($"Report generated: {result.OutputPath}");
+            Log($"HTMLレポートを生成しました: {result.OutputPath}");
             if (_openAfterGeneration.Checked)
             {
                 Process.Start(new ProcessStartInfo(result.OutputPath) { UseShellExecute = true });
@@ -355,7 +362,75 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            Log($"Error: {ex.Message}");
+            Log($"エラー: {ex.Message}");
+        }
+        finally
+        {
+            SetBusy(false);
+        }
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (_analysis is null)
+        {
+            Log("先にプロジェクトを読み込んでください。");
+            return;
+        }
+
+        if (!File.Exists(_xmlPath.Text))
+        {
+            Log("DotCover XMLを選択してください。");
+            return;
+        }
+
+        using var fileDialog = new FileSelectionDialog(_analysis.SourceFiles, _analysis.Members);
+        if (fileDialog.ShowDialog(this) != DialogResult.OK || fileDialog.SelectedSourceFile is null)
+        {
+            return;
+        }
+
+        var sourceFile = fileDialog.SelectedSourceFile;
+        var outputDirectory = string.IsNullOrWhiteSpace(_outputDirectory.Text)
+            ? Path.Combine(_analysis.ProjectRoot, "coverage-report")
+            : _outputDirectory.Text;
+        Directory.CreateDirectory(outputDirectory);
+
+        using var saveDialog = new SaveFileDialog
+        {
+            Filter = "Excelブック (*.xlsx)|*.xlsx",
+            Title = "Excelレポートの保存先を選択",
+            FileName = $"{Path.GetFileNameWithoutExtension(sourceFile.FullPath)}-coverage.xlsx",
+            InitialDirectory = outputDirectory,
+            OverwritePrompt = true
+        };
+        if (saveDialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        try
+        {
+            SetBusy(true);
+            SaveCurrentSettings();
+            var service = new ExcelReportGenerationService();
+            var result = await service.GenerateAsync(new ExcelReportGenerationOptions(
+                _projectPath.Text,
+                _xmlPath.Text,
+                sourceFile.FullPath,
+                saveDialog.FileName,
+                _includePatterns.Text,
+                _excludePatterns.Text), new Progress<string>(Log));
+
+            Log($"Excelレポートを生成しました: {result.OutputPath}");
+            if (_openAfterGeneration.Checked)
+            {
+                Process.Start(new ProcessStartInfo(result.OutputPath) { UseShellExecute = true });
+            }
+        }
+        catch (Exception ex)
+        {
+            Log($"エラー: {ex.Message}");
         }
         finally
         {
@@ -383,10 +458,10 @@ public sealed class MainForm : Form
         {
             var included = selectedSet.Contains(file.FullPath);
             var members = _analysis.Members.Count(member => member.FilePath.Equals(file.FullPath, StringComparison.OrdinalIgnoreCase));
-            _previewGrid.Rows.Add(included ? "Yes" : "No", "Pending", members, file.RelativePath, included ? "Included by current scope" : "Filtered out");
+            _previewGrid.Rows.Add(included ? "はい" : "いいえ", "未生成", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "フィルタまたは対象範囲外です");
         }
 
-        _previewStatus.Text = $"Target Preview · Files: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · Members: {_analysis.Members.Count}";
+        _previewStatus.Text = $"対象プレビュー · ファイル: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · メンバー: {_analysis.Members.Count}";
     }
 
     private CoverageScopeType CurrentScopeType()
@@ -407,6 +482,7 @@ public sealed class MainForm : Form
     private void SetBusy(bool busy)
     {
         _generateButton.Enabled = !busy;
+        _excelButton.Enabled = !busy;
         Cursor = busy ? Cursors.WaitCursor : Cursors.Default;
     }
 
@@ -462,7 +538,7 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            Log($"Settings were not saved: {ex.Message}");
+            Log($"設定を保存できませんでした: {ex.Message}");
         }
     }
 
@@ -474,14 +550,14 @@ public sealed class MainForm : Form
         }
         catch (Exception ex)
         {
-            Log($"Settings were not reset: {ex.Message}");
+            Log($"設定を初期化できませんでした: {ex.Message}");
         }
 
         // 保存済み設定と画面上の解析状態を同時に初期化する。
         _analysis = null;
         ApplySettings(AppSettings.Defaults);
-        _projectStatus.Text = "Project: not loaded";
-        _previewStatus.Text = "Target Preview";
+        _projectStatus.Text = "プロジェクト: 未読込";
+        _previewStatus.Text = "対象プレビュー";
         _previewGrid.Rows.Clear();
         _log.Clear();
     }
