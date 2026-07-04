@@ -1,55 +1,46 @@
 # CoverageReportGenerator
 
-C# / WinForms で作成した、JetBrains dotCover DetailedXML からオフライン閲覧できるHTMLカバレッジレポートを生成するツールです。
+C# / WinForms で作成した、JetBrains dotCover DetailedXML からオフライン閲覧できるカバレッジレポートを生成するツールです。
 
-主な対象は Razor Pages プロジェクトです。`.csproj` を読み込み、Roslyn AST解析でソース上のメソッドや行範囲を把握したうえで、dotCover XMLのStatement情報をHTMLに変換します。
-プロジェクト解析は必ず `.csproj` ファイルの選択を起点に行います。
+主な対象は Razor Pages プロジェクトです。`.csproj` を読み込み、Roslyn AST解析でソース上のメソッドや行範囲を把握したうえで、dotCover XML の Statement 情報を HTML または Excel に変換します。プロジェクト解析は必ず `.csproj` ファイルの選択を起点に行います。
 
-## 機能
+## ドキュメント
 
-- `.csproj` と dotCover DetailedXML を選択してHTMLレポートを生成します。
-- プロジェクト全体、フォルダ配下、単一ファイルを解析対象にできます。
-- フォルダを選択した場合は、配下のファイルを再帰的に対象にします。
-- セミコロン区切りのワイルドカードでファイルをフィルタリングできます。
-- 前回入力したプロジェクト、XML、出力先、フィルタ、オプションを次回起動時に復元します。
-- Resetボタンで入力内容を初期状態に戻せます。
-- `.csproj` のソース検出結果と Roslyn のメンバー解析結果を `%LOCALAPPDATA%\CoverageReportGenerator\cache` にキャッシュします。
-- CSS/JavaScriptを埋め込んだ単一HTMLファイルを生成します。
-- Summary、Rankings、Members、Files、Source を表示します。
-- メンバー名やTree行をクリックすると、対象ソース行へジャンプします。
-- UTF-8、UTF-16、Shift_JIS/CP932のソースファイルを読み取ります。
-- 行状態は Covered、Uncovered、No Data の3種類のみを表示します。
+- [利用者向けガイド](docs/USER_GUIDE.md)
+  - アプリの使い方
+  - dotCover XML の用意
+  - HTML / Excel レポートの見方
+  - よくあるトラブル
+- [開発者向けガイド](docs/DEVELOPER_GUIDE.md)
+  - プロジェクト構成
+  - レポート生成の内部フロー
+  - テストと検証方針
+  - publish / bootstrap の扱い
 
-## 対応XML
+## 主な機能
 
-最初に対応する入力は dotCover DetailedXML です。実質的に次のような構造を想定しています。
+- `.csproj` と dotCover DetailedXML を選択して HTML レポートを生成
+- プロジェクト全体、フォルダ配下、単一ファイルを解析対象に指定
+- フォルダ配下の再帰解析
+- セミコロン区切りのワイルドカードによる対象ファイルフィルタ
+- 前回入力内容の保存と復元
+- 初期化ボタンによる設定リセット
+- プロジェクト解析結果のキャッシュ
+- UTF-8、UTF-16、Shift_JIS / CP932 の XML とソース読み取り
+- HTML レポートの視覚的なカバレッジバー表示
+- メンバー名クリックによるソース行ジャンプ
+- 単一ファイルの Excel レポート出力
+- Excel 上での未カバー行 `※` 表示とメンバー定義行リンク
 
-```text
-Root
-  FileIndices
-    File
-  Assembly
-    Namespace
-      Type
-        Method
-          Statement
-```
+## 動作環境
 
-XML内の要素順には依存しません。`FileIndices/File` と `Statement` はXMLツリーから探索します。
+- Windows
+- .NET 8 SDK
+- dotCover DetailedXML を出力できる環境
 
-必須属性:
+通常利用では `CoverageReportGenerator.exe` を起動します。開発や bootstrap 実行には .NET 8 SDK が必要です。
 
-- `File Index`
-- `File Name`
-- `Statement FileIndex`
-- `Statement Line`
-- `Statement Covered`
-
-`Assembly`、`Namespace`、`Type`、`Method` は存在する場合に利用します。階層情報が欠けている場合は `Unknown` として扱います。
-
-## 開発
-
-テストフレームワークは MSTest を使用します。
+## 開発コマンド
 
 ```powershell
 dotnet restore
@@ -70,45 +61,17 @@ dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinF
   /p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-実行ファイルは次のフォルダに出力されます。
-
-```text
-src/CoverageReportGenerator.WinForms/bin/Release/net8.0-windows/win-x64/publish/
-```
-
 出力ファイル名は `CoverageReportGenerator.exe` です。
 
 ## 単一PowerShellファイルからのBootstrap
 
-リポジトリをcloneできないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.ps1` を用意しています。
-
-このファイルはpublicリポジトリのzipをダウンロードし、WinFormsアプリをpublishします。
-出力先には `CoverageReportGenerator.exe` と、テストコードを含む `source/` フォルダを作成します。ビルド生成物やGitメタデータは除外します。
-
-.NET 8 SDK が入っていれば、コンソールプロジェクトを作らずに実行できます。
+リポジトリを clone できないユーザー向けに、`bootstrap/CoverageReportGenerator.Bootstrap.ps1` を用意しています。
 
 ```powershell
 .\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Output .\dist
 ```
 
-ローカルソースを指定する場合:
-
-```powershell
-.\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Source C:\work\CoverageReportGenerator -Output .\dist
-```
-
-## プロジェクト構成
-
-```text
-src/
-  CoverageReportGenerator.Core/
-  CoverageReportGenerator.WinForms/
-tests/
-  CoverageReportGenerator.Core.Tests/
-bootstrap/
-  CoverageReportGenerator.Bootstrap.ps1
-  CoverageReportGenerator.Bootstrap.cs
-```
+このスクリプトは public リポジトリの zip をダウンロードし、WinForms アプリを publish します。出力先には `CoverageReportGenerator.exe` と、テストコードを含む `source/` フォルダを作成します。
 
 ## ライセンス
 
