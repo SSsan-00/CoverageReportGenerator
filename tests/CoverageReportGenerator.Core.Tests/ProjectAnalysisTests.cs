@@ -63,6 +63,52 @@ public sealed class ProjectAnalysisTests
     }
 
     /// <summary>
+    /// フォルダ選択UI用のツリーに再帰的なファイル数とメンバー数が集計されることを検証する。
+    /// </summary>
+    [TestMethod]
+    public void Folder_tree_builder_groups_sources_and_members_recursively()
+    {
+        using var workspace = TestWorkspace.Create();
+        var adminEdit = workspace.PathOf(@"Pages\Admin\Edit.cshtml.cs");
+        var adminDetails = workspace.PathOf(@"Pages\Admin\Details.cshtml.cs");
+        var index = workspace.PathOf(@"Pages\Index.cshtml.cs");
+        var service = workspace.PathOf(@"Services\CartService.cs");
+        var analysis = new ProjectAnalysis(
+            workspace.PathOf("Sample.Web.csproj"),
+            "Sample.Web",
+            workspace.Root,
+            [
+                new SourceFile(adminEdit, @"Pages\Admin\Edit.cshtml.cs", ".cs"),
+                new SourceFile(adminDetails, @"Pages\Admin\Details.cshtml.cs", ".cs"),
+                new SourceFile(index, @"Pages\Index.cshtml.cs", ".cs"),
+                new SourceFile(service, @"Services\CartService.cs", ".cs")
+            ],
+            [
+                new SourceMember(adminEdit, @"Pages\Admin\Edit.cshtml.cs", SourceMemberKind.Method, "EditModel", "OnGet", "OnGet", "OnGet()", 1, 3),
+                new SourceMember(adminDetails, @"Pages\Admin\Details.cshtml.cs", SourceMemberKind.Method, "DetailsModel", "OnGet", "OnGet", "OnGet()", 1, 3),
+                new SourceMember(service, @"Services\CartService.cs", SourceMemberKind.Method, "CartService", "Calculate", "Calculate", "Calculate()", 1, 3)
+            ],
+            ProjectCacheStatus.Valid);
+
+        var root = new ProjectFolderTreeBuilder().Build(analysis);
+        var pages = root.Children.Single(folder => folder.Name == "Pages");
+        var admin = pages.Children.Single(folder => folder.Name == "Admin");
+        var services = root.Children.Single(folder => folder.Name == "Services");
+
+        Assert.AreEqual("Sample.Web", root.Name);
+        Assert.AreEqual(string.Empty, root.RelativePath);
+        Assert.AreEqual(4, root.SourceFileCount);
+        Assert.AreEqual(3, root.MemberCount);
+        Assert.AreEqual(3, pages.SourceFileCount);
+        Assert.AreEqual(2, pages.MemberCount);
+        Assert.AreEqual(2, admin.SourceFileCount);
+        Assert.AreEqual(2, admin.MemberCount);
+        Assert.AreEqual(workspace.PathOf(@"Pages\Admin"), admin.FullPath);
+        Assert.AreEqual(1, services.SourceFileCount);
+        Assert.AreEqual(1, services.MemberCount);
+    }
+
+    /// <summary>
     /// Compile Includeがあってもディレクトリ走査を継続することを検証する。
     /// </summary>
     [TestMethod]

@@ -10,12 +10,13 @@ namespace CoverageReportGenerator.WinForms;
 /// </summary>
 public sealed class MainForm : Form
 {
+    private const string ImplicitIncludePatterns = "*.cs;*.cshtml";
+    private const string ImplicitExcludePatterns = "*.g.cs;*.generated.cs;*.Designer.cs;bin;obj";
+
     private readonly AppSettingsService _settingsService = new();
     private readonly TextBox _projectPath = new() { ReadOnly = true };
     private readonly TextBox _xmlPath = new();
     private readonly TextBox _scopePath = new();
-    private readonly TextBox _includePatterns = new() { Text = "*.cs;*.cshtml" };
-    private readonly TextBox _excludePatterns = new() { Text = "*.g.cs;*.generated.cs;*.Designer.cs;bin;obj" };
     private readonly TextBox _outputDirectory = new();
     private readonly TextBox _reportTitle = new();
     private readonly RadioButton _projectScope = new() { Text = "プロジェクト", Checked = true };
@@ -25,13 +26,18 @@ public sealed class MainForm : Form
     private readonly CheckBox _overwriteExisting = new() { Text = "既存ファイルを上書き", AutoSize = true };
     private readonly Label _projectStatus = new() { AutoSize = true, Text = "プロジェクト: 未読込" };
     private readonly Label _previewStatus = new() { AutoSize = true, Text = "対象プレビュー" };
+    private readonly TextBox _previewFilter = new() { PlaceholderText = "ファイル名・フォルダで絞り込み" };
+    private readonly TreeView _folderTree = new();
     private readonly DataGridView _previewGrid = new();
     private readonly RichTextBox _log = new() { ReadOnly = true, BorderStyle = BorderStyle.None };
     private readonly Button _resetButton = new() { Text = "初期化", Height = 36 };
     private readonly Button _excelButton = new() { Text = "Excel出力", Height = 36 };
     private readonly Button _generateButton = new() { Text = "HTML生成", Height = 36 };
 
+    private Button? _scopeBrowseButton;
     private ProjectAnalysis? _analysis;
+    private bool _syncingFolderTree;
+    private bool _syncingScope;
 
     /// <summary>
     /// メイン画面を初期化する。
@@ -90,9 +96,8 @@ public sealed class MainForm : Form
         panel.Controls.Add(_projectStatus, 1, panel.RowCount++);
         AddPathRow(panel, "DotCover XML", _xmlPath, "選択", BrowseXml, null, null);
         AddScopeRow(panel);
-        AddPathRow(panel, "対象パス", _scopePath, "選択", BrowseScope, null, null);
-        AddTextRow(panel, "Include", _includePatterns);
-        AddTextRow(panel, "Exclude", _excludePatterns);
+        _scopeBrowseButton = AddPathRow(panel, "対象パス", _scopePath, "選択", BrowseScope, null, null);
+        _scopePath.TextChanged += (_, _) => ScopeInputChanged();
         AddPathRow(panel, "出力先", _outputDirectory, "選択", BrowseOutput, null, null);
         AddTextRow(panel, "レポート名", _reportTitle);
 
@@ -129,6 +134,61 @@ public sealed class MainForm : Form
         _previewStatus.Padding = new Padding(0, 0, 0, 6);
         panel.Controls.Add(_previewStatus, 0, 0);
 
+        var split = new SplitContainer
+        {
+            Dock = DockStyle.Fill,
+            Orientation = Orientation.Vertical,
+            FixedPanel = FixedPanel.Panel1
+        };
+        const int folderPanelMinimumWidth = 180;
+        const int previewPanelMinimumWidth = 240;
+        var splitDistanceInitialized = false;
+        split.SizeChanged += (_, _) =>
+        {
+            if (splitDistanceInitialized || split.Width <= folderPanelMinimumWidth + previewPanelMinimumWidth)
+            {
+                return;
+            }
+
+            split.Panel1MinSize = folderPanelMinimumWidth;
+            split.Panel2MinSize = previewPanelMinimumWidth;
+            split.SplitterDistance = Math.Min(320, split.Width - previewPanelMinimumWidth);
+            splitDistanceInitialized = true;
+        };
+
+        var folderPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(0, 0, 10, 0)
+        };
+        folderPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        folderPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        folderPanel.Controls.Add(new Label { Text = "フォルダ", AutoSize = true, Padding = new Padding(0, 0, 0, 6) }, 0, 0);
+
+        _folderTree.Dock = DockStyle.Fill;
+        _folderTree.HideSelection = false;
+        _folderTree.FullRowSelect = true;
+        _folderTree.ShowNodeToolTips = true;
+        _folderTree.AfterSelect += FolderTreeAfterSelect;
+        folderPanel.Controls.Add(_folderTree, 0, 1);
+        split.Panel1.Controls.Add(folderPanel);
+
+        var filePreviewPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        filePreviewPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        filePreviewPanel.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+
+        _previewFilter.Dock = DockStyle.Top;
+        _previewFilter.Margin = new Padding(0, 0, 0, 6);
+        _previewFilter.TextChanged += (_, _) => RefreshPreview();
+        filePreviewPanel.Controls.Add(_previewFilter, 0, 0);
+
         _previewGrid.Dock = DockStyle.Fill;
         _previewGrid.ReadOnly = true;
         _previewGrid.AllowUserToAddRows = false;
@@ -136,6 +196,7 @@ public sealed class MainForm : Form
         _previewGrid.RowHeadersVisible = false;
         _previewGrid.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         _previewGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+        _previewGrid.CellClick += PreviewGridCellClick;
         _previewGrid.Columns.Add("Included", "対象");
         _previewGrid.Columns.Add("Members", "メンバー");
         _previewGrid.Columns.Add("Path", "パス");
@@ -144,7 +205,9 @@ public sealed class MainForm : Form
         _previewGrid.Columns["Members"]!.FillWeight = 14;
         _previewGrid.Columns["Path"]!.FillWeight = 82;
         _previewGrid.Columns["Reason"]!.FillWeight = 40;
-        panel.Controls.Add(_previewGrid, 0, 1);
+        filePreviewPanel.Controls.Add(_previewGrid, 0, 1);
+        split.Panel2.Controls.Add(filePreviewPanel);
+        panel.Controls.Add(split, 0, 1);
         return panel;
     }
 
@@ -158,7 +221,7 @@ public sealed class MainForm : Form
         return tabs;
     }
 
-    private void AddPathRow(
+    private Button AddPathRow(
         TableLayoutPanel panel,
         string label,
         TextBox textBox,
@@ -189,6 +252,8 @@ public sealed class MainForm : Form
 
             panel.Controls.Add(second, 3, row);
         }
+
+        return browse;
     }
 
     private void AddTextRow(TableLayoutPanel panel, string label, TextBox textBox)
@@ -209,9 +274,9 @@ public sealed class MainForm : Form
         group.Controls.Add(_projectScope);
         group.Controls.Add(_folderScope);
         group.Controls.Add(_fileScope);
-        _projectScope.CheckedChanged += (_, _) => RefreshPreview();
-        _folderScope.CheckedChanged += (_, _) => RefreshPreview();
-        _fileScope.CheckedChanged += (_, _) => RefreshPreview();
+        _projectScope.CheckedChanged += (_, _) => ScopeInputChanged();
+        _folderScope.CheckedChanged += (_, _) => ScopeInputChanged();
+        _fileScope.CheckedChanged += (_, _) => ScopeInputChanged();
 
         panel.Controls.Add(new Label { Text = "対象範囲", AutoSize = true, Anchor = AnchorStyles.Left, Padding = new Padding(0, 6, 0, 0) }, 0, row);
         panel.Controls.Add(group, 1, row);
@@ -267,6 +332,7 @@ public sealed class MainForm : Form
             _analysis = await analyzer.AnalyzeAsync(_projectPath.Text, new Progress<ProjectAnalysisProgress>(item => Log(item.Message)));
             _projectStatus.Text = $"プロジェクト: {_analysis.ProjectName} · ファイル: {_analysis.SourceFiles.Count} · メンバー: {_analysis.Members.Count} · キャッシュ: {_analysis.CacheStatus}";
             Log($"プロジェクトを読み込みました。キャッシュ: {_analysis.CacheStatus}");
+            PopulateFolderTree();
             RefreshPreview();
         }
         catch (Exception ex)
@@ -305,7 +371,7 @@ public sealed class MainForm : Form
             using var dialog = new OpenFileDialog { Filter = "ソースファイル (*.cs;*.cshtml)|*.cs;*.cshtml|すべてのファイル (*.*)|*.*", Title = "対象ソースファイルを選択" };
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
-                _scopePath.Text = dialog.FileName;
+                ApplyScopeSelection(CoverageScopeType.File, dialog.FileName);
             }
         }
         else
@@ -313,12 +379,9 @@ public sealed class MainForm : Form
             using var dialog = new FolderBrowserDialog { Description = "対象フォルダを選択" };
             if (dialog.ShowDialog(this) == DialogResult.OK)
             {
-                _scopePath.Text = dialog.SelectedPath;
-                _folderScope.Checked = true;
+                ApplyScopeSelection(CoverageScopeType.Folder, dialog.SelectedPath);
             }
         }
-
-        RefreshPreview();
         return Task.CompletedTask;
     }
 
@@ -331,6 +394,198 @@ public sealed class MainForm : Form
         }
 
         return Task.CompletedTask;
+    }
+
+    private void ScopeInputChanged()
+    {
+        if (_syncingFolderTree || _syncingScope)
+        {
+            return;
+        }
+
+        if (_projectScope.Checked)
+        {
+            ApplyScopeSelection(CoverageScopeType.Project, null);
+            return;
+        }
+
+        UpdateScopePathState();
+        SelectFolderTreeNodeForCurrentScope();
+        RefreshPreview();
+    }
+
+    private void PreviewGridCellClick(object? sender, DataGridViewCellEventArgs e)
+    {
+        if (e.RowIndex < 0 || _previewGrid.Rows[e.RowIndex].Tag is not SourceFile file)
+        {
+            return;
+        }
+
+        ApplyScopeSelection(CoverageScopeType.File, file.FullPath);
+    }
+
+    private void FolderTreeAfterSelect(object? sender, TreeViewEventArgs e)
+    {
+        if (_syncingFolderTree || e.Node?.Tag is not ProjectFolderNode folder)
+        {
+            return;
+        }
+
+        if (string.IsNullOrEmpty(folder.RelativePath))
+        {
+            ApplyScopeSelection(CoverageScopeType.Project, null);
+            return;
+        }
+
+        ApplyScopeSelection(CoverageScopeType.Folder, folder.FullPath);
+    }
+
+    private void ApplyScopeSelection(CoverageScopeType scopeType, string? scopePath)
+    {
+        _syncingScope = true;
+        try
+        {
+            _projectScope.Checked = scopeType == CoverageScopeType.Project;
+            _folderScope.Checked = scopeType == CoverageScopeType.Folder;
+            _fileScope.Checked = scopeType == CoverageScopeType.File;
+            _scopePath.Text = scopeType == CoverageScopeType.Project ? string.Empty : scopePath ?? string.Empty;
+            UpdateScopePathState();
+        }
+        finally
+        {
+            _syncingScope = false;
+        }
+
+        SelectFolderTreeNodeForCurrentScope();
+        RefreshPreview();
+    }
+
+    private void UpdateScopePathState()
+    {
+        var projectScope = CurrentScopeType() == CoverageScopeType.Project;
+        _scopePath.Enabled = !projectScope;
+        if (_scopeBrowseButton is not null)
+        {
+            _scopeBrowseButton.Enabled = !projectScope;
+        }
+    }
+
+    private void PopulateFolderTree()
+    {
+        _folderTree.BeginUpdate();
+        _syncingFolderTree = true;
+        try
+        {
+            _folderTree.Nodes.Clear();
+            if (_analysis is null)
+            {
+                return;
+            }
+
+            var root = new ProjectFolderTreeBuilder().Build(_analysis);
+            var rootNode = CreateFolderTreeNode(root);
+            _folderTree.Nodes.Add(rootNode);
+            rootNode.Expand();
+        }
+        finally
+        {
+            _syncingFolderTree = false;
+            _folderTree.EndUpdate();
+        }
+
+        SelectFolderTreeNodeForCurrentScope();
+    }
+
+    private static TreeNode CreateFolderTreeNode(ProjectFolderNode folder)
+    {
+        var node = new TreeNode(FolderNodeLabel(folder))
+        {
+            Tag = folder,
+            ToolTipText = string.IsNullOrEmpty(folder.RelativePath) ? "プロジェクト全体" : folder.RelativePath
+        };
+
+        foreach (var child in folder.Children)
+        {
+            node.Nodes.Add(CreateFolderTreeNode(child));
+        }
+
+        return node;
+    }
+
+    private static string FolderNodeLabel(ProjectFolderNode folder)
+    {
+        return $"{folder.Name}  ファイル:{folder.SourceFileCount}  メンバー:{folder.MemberCount}";
+    }
+
+    private void SelectFolderTreeNodeForCurrentScope()
+    {
+        if (_syncingFolderTree || _folderTree.Nodes.Count == 0)
+        {
+            return;
+        }
+
+        TreeNode? selected = CurrentScopeType() switch
+        {
+            CoverageScopeType.Project => _folderTree.Nodes[0],
+            CoverageScopeType.Folder when !string.IsNullOrWhiteSpace(_scopePath.Text) => FindFolderTreeNode(_folderTree.Nodes, _scopePath.Text),
+            _ => null
+        };
+
+        _syncingFolderTree = true;
+        try
+        {
+            _folderTree.SelectedNode = selected;
+            selected?.EnsureVisible();
+        }
+        finally
+        {
+            _syncingFolderTree = false;
+        }
+    }
+
+    private static TreeNode? FindFolderTreeNode(TreeNodeCollection nodes, string folderPath)
+    {
+        foreach (TreeNode node in nodes)
+        {
+            if (node.Tag is ProjectFolderNode folder && PathsEqual(folder.FullPath, folderPath))
+            {
+                return node;
+            }
+
+            var child = FindFolderTreeNode(node.Nodes, folderPath);
+            if (child is not null)
+            {
+                return child;
+            }
+        }
+
+        return null;
+    }
+
+    private static bool PathsEqual(string left, string right)
+    {
+        return NormalizePath(left).Equals(NormalizePath(right), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return string.Empty;
+        }
+
+        try
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+        catch (ArgumentException)
+        {
+            return path.Trim();
+        }
+        catch (NotSupportedException)
+        {
+            return path.Trim();
+        }
     }
 
     private async Task GenerateAsync()
@@ -348,8 +603,8 @@ public sealed class MainForm : Form
                 _reportTitle.Text,
                 CurrentScopeType(),
                 CurrentScopePath(),
-                _includePatterns.Text,
-                _excludePatterns.Text,
+                ImplicitIncludePatterns,
+                ImplicitExcludePatterns,
                 _overwriteExisting.Checked), new Progress<string>(Log));
 
             Log($"HTMLレポートを生成しました: {result.OutputPath}");
@@ -417,8 +672,8 @@ public sealed class MainForm : Form
                 _xmlPath.Text,
                 sourceFile.FullPath,
                 saveDialog.FileName,
-                _includePatterns.Text,
-                _excludePatterns.Text), new Progress<string>(Log));
+                ImplicitIncludePatterns,
+                ImplicitExcludePatterns), new Progress<string>(Log));
 
             Log($"Excelレポートを生成しました: {result.OutputPath}");
             if (_openAfterGeneration.Checked)
@@ -443,23 +698,42 @@ public sealed class MainForm : Form
             return;
         }
 
-        var selection = new CoverageSelection(CurrentScopeType(), CurrentScopePath(), _includePatterns.Text, _excludePatterns.Text);
+        var selection = new CoverageSelection(CurrentScopeType(), CurrentScopePath(), ImplicitIncludePatterns, ImplicitExcludePatterns);
         var selected = new CoverageTargetSelector().Select(new ProjectSourceSnapshot(
             _analysis.ProjectPath,
             _analysis.ProjectName,
             _analysis.ProjectRoot,
             _analysis.SourceFiles), selection);
         var selectedSet = selected.IncludedFiles.Select(file => file.FullPath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var filteredFiles = _analysis.SourceFiles
+            .Where(MatchesPreviewFilter)
+            .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ToList();
 
         _previewGrid.Rows.Clear();
-        foreach (var file in _analysis.SourceFiles.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase))
+        foreach (var file in filteredFiles)
         {
             var included = selectedSet.Contains(file.FullPath);
             var members = _analysis.Members.Count(member => member.FilePath.Equals(file.FullPath, StringComparison.OrdinalIgnoreCase));
-            _previewGrid.Rows.Add(included ? "○" : "×", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "フィルタまたは対象範囲外です");
+            var rowIndex = _previewGrid.Rows.Add(included ? "○" : "×", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "対象範囲外です");
+            _previewGrid.Rows[rowIndex].Tag = file;
         }
 
-        _previewStatus.Text = $"対象プレビュー · ファイル: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · メンバー: {_analysis.Members.Count}";
+        _previewStatus.Text = $"対象プレビュー · 対象ファイル: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · 表示: {filteredFiles.Count} · メンバー: {_analysis.Members.Count}";
+    }
+
+    private bool MatchesPreviewFilter(SourceFile file)
+    {
+        var words = _previewFilter.Text.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length == 0)
+        {
+            return true;
+        }
+
+        return words.All(word =>
+            file.RelativePath.Contains(word, StringComparison.OrdinalIgnoreCase) ||
+            file.FullPath.Contains(word, StringComparison.OrdinalIgnoreCase) ||
+            file.Extension.Contains(word, StringComparison.OrdinalIgnoreCase));
     }
 
     private CoverageScopeType CurrentScopeType()
@@ -501,16 +775,11 @@ public sealed class MainForm : Form
     {
         _projectPath.Text = settings.ProjectPath;
         _xmlPath.Text = settings.DotCoverXmlPath;
-        _scopePath.Text = settings.ScopePath;
-        _includePatterns.Text = settings.IncludePatterns;
-        _excludePatterns.Text = settings.ExcludePatterns;
         _outputDirectory.Text = settings.OutputDirectory;
         _reportTitle.Text = settings.ReportTitle;
         _openAfterGeneration.Checked = settings.OpenAfterGeneration;
         _overwriteExisting.Checked = settings.OverwriteExisting;
-        _projectScope.Checked = settings.ScopeType == CoverageScopeType.Project;
-        _folderScope.Checked = settings.ScopeType == CoverageScopeType.Folder;
-        _fileScope.Checked = settings.ScopeType == CoverageScopeType.File;
+        ApplyScopeSelection(settings.ScopeType, settings.ScopePath);
     }
 
     private AppSettings CaptureSettings()
@@ -518,9 +787,9 @@ public sealed class MainForm : Form
         return new AppSettings(
             _projectPath.Text,
             _xmlPath.Text,
-            _scopePath.Text,
-            _includePatterns.Text,
-            _excludePatterns.Text,
+            CurrentScopePath() ?? string.Empty,
+            ImplicitIncludePatterns,
+            ImplicitExcludePatterns,
             _outputDirectory.Text,
             _reportTitle.Text,
             CurrentScopeType(),
@@ -556,6 +825,8 @@ public sealed class MainForm : Form
         ApplySettings(AppSettings.Defaults);
         _projectStatus.Text = "プロジェクト: 未読込";
         _previewStatus.Text = "対象プレビュー";
+        _previewFilter.Clear();
+        _folderTree.Nodes.Clear();
         _previewGrid.Rows.Clear();
         _log.Clear();
     }
