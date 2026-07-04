@@ -421,7 +421,7 @@ public sealed class MainForm : Form
             return;
         }
 
-        ApplyScopeSelection(CoverageScopeType.File, file.FullPath);
+        ApplyScopeSelection(CoverageScopeType.File, file.FullPath, true);
     }
 
     private void FolderTreeAfterSelect(object? sender, TreeViewEventArgs e)
@@ -440,7 +440,7 @@ public sealed class MainForm : Form
         ApplyScopeSelection(CoverageScopeType.Folder, folder.FullPath);
     }
 
-    private void ApplyScopeSelection(CoverageScopeType scopeType, string? scopePath)
+    private void ApplyScopeSelection(CoverageScopeType scopeType, string? scopePath, bool preservePreviewPosition = false)
     {
         _syncingScope = true;
         try
@@ -457,7 +457,7 @@ public sealed class MainForm : Form
         }
 
         SelectFolderTreeNodeForCurrentScope();
-        RefreshPreview();
+        RefreshPreview(preservePreviewPosition, scopeType == CoverageScopeType.File ? scopePath : null);
     }
 
     private void UpdateScopePathState()
@@ -691,12 +691,14 @@ public sealed class MainForm : Form
         }
     }
 
-    private void RefreshPreview()
+    private void RefreshPreview(bool preserveGridPosition = false, string? preferredFilePath = null)
     {
         if (_analysis is null)
         {
             return;
         }
+
+        var previewState = preserveGridPosition ? CapturePreviewGridState(preferredFilePath) : null;
 
         var selection = new CoverageSelection(CurrentScopeType(), CurrentScopePath(), ImplicitIncludePatterns, ImplicitExcludePatterns);
         var selected = new CoverageTargetSelector().Select(new ProjectSourceSnapshot(
@@ -710,16 +712,91 @@ public sealed class MainForm : Form
             .OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ToList();
 
-        _previewGrid.Rows.Clear();
-        foreach (var file in filteredFiles)
+        _previewGrid.SuspendLayout();
+        try
         {
-            var included = selectedSet.Contains(file.FullPath);
-            var members = _analysis.Members.Count(member => member.FilePath.Equals(file.FullPath, StringComparison.OrdinalIgnoreCase));
-            var rowIndex = _previewGrid.Rows.Add(included ? "○" : "×", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "対象範囲外です");
-            _previewGrid.Rows[rowIndex].Tag = file;
+            _previewGrid.Rows.Clear();
+            foreach (var file in filteredFiles)
+            {
+                var included = selectedSet.Contains(file.FullPath);
+                var members = _analysis.Members.Count(member => member.FilePath.Equals(file.FullPath, StringComparison.OrdinalIgnoreCase));
+                var rowIndex = _previewGrid.Rows.Add(included ? "○" : "×", members, file.RelativePath, included ? "現在の対象範囲に含まれます" : "対象範囲外です");
+                _previewGrid.Rows[rowIndex].Tag = file;
+            }
+
+            if (previewState is not null)
+            {
+                RestorePreviewGridState(previewState);
+            }
+        }
+        finally
+        {
+            _previewGrid.ResumeLayout();
         }
 
         _previewStatus.Text = $"対象プレビュー · 対象ファイル: {selected.IncludedFiles.Count} / {_analysis.SourceFiles.Count} · 表示: {filteredFiles.Count} · メンバー: {_analysis.Members.Count}";
+    }
+
+    private PreviewGridState CapturePreviewGridState(string? preferredFilePath)
+    {
+        var selectedPath = preferredFilePath;
+        if (string.IsNullOrWhiteSpace(selectedPath) && _previewGrid.CurrentRow?.Tag is SourceFile currentFile)
+        {
+            selectedPath = currentFile.FullPath;
+        }
+
+        var firstDisplayedRowIndex = -1;
+        if (_previewGrid.Rows.Count > 0)
+        {
+            try
+            {
+                firstDisplayedRowIndex = _previewGrid.FirstDisplayedScrollingRowIndex;
+            }
+            catch (InvalidOperationException)
+            {
+                firstDisplayedRowIndex = -1;
+            }
+        }
+
+        return new PreviewGridState(selectedPath, firstDisplayedRowIndex);
+    }
+
+    private void RestorePreviewGridState(PreviewGridState state)
+    {
+        if (_previewGrid.Rows.Count == 0)
+        {
+            return;
+        }
+
+        DataGridViewRow? selectedRow = null;
+        if (!string.IsNullOrWhiteSpace(state.SelectedFilePath))
+        {
+            selectedRow = _previewGrid.Rows
+                .Cast<DataGridViewRow>()
+                .FirstOrDefault(row => row.Tag is SourceFile file
+                    && file.FullPath.Equals(state.SelectedFilePath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (selectedRow is not null)
+        {
+            _previewGrid.ClearSelection();
+            selectedRow.Selected = true;
+            _previewGrid.CurrentCell = selectedRow.Cells[0];
+        }
+
+        if (state.FirstDisplayedRowIndex < 0)
+        {
+            return;
+        }
+
+        var firstDisplayedRowIndex = Math.Min(state.FirstDisplayedRowIndex, _previewGrid.Rows.Count - 1);
+        try
+        {
+            _previewGrid.FirstDisplayedScrollingRowIndex = firstDisplayedRowIndex;
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 
     private bool MatchesPreviewFilter(SourceFile file)
@@ -750,6 +827,8 @@ public sealed class MainForm : Form
     {
         return CurrentScopeType() == CoverageScopeType.Project ? null : _scopePath.Text;
     }
+
+    private sealed record PreviewGridState(string? SelectedFilePath, int FirstDisplayedRowIndex);
 
     private void SetBusy(bool busy)
     {

@@ -84,9 +84,9 @@ public sealed class ProjectAnalysisTests
                 new SourceFile(service, @"Services\CartService.cs", ".cs")
             ],
             [
-                new SourceMember(adminEdit, @"Pages\Admin\Edit.cshtml.cs", SourceMemberKind.Method, "EditModel", "OnGet", "OnGet", "OnGet()", 1, 3),
-                new SourceMember(adminDetails, @"Pages\Admin\Details.cshtml.cs", SourceMemberKind.Method, "DetailsModel", "OnGet", "OnGet", "OnGet()", 1, 3),
-                new SourceMember(service, @"Services\CartService.cs", SourceMemberKind.Method, "CartService", "Calculate", "Calculate", "Calculate()", 1, 3)
+                new SourceMember(adminEdit, Path.GetFileName(adminEdit), SourceMemberKind.Method, "EditModel", "OnGet", "OnGet", "OnGet()", 1, 3),
+                new SourceMember(adminDetails, Path.GetFileName(adminDetails), SourceMemberKind.Method, "DetailsModel", "OnGet", "OnGet", "OnGet()", 1, 3),
+                new SourceMember(service, Path.GetFileName(service), SourceMemberKind.Method, "CartService", "Calculate", "Calculate", "Calculate()", 1, 3)
             ],
             ProjectCacheStatus.Valid);
 
@@ -106,6 +106,27 @@ public sealed class ProjectAnalysisTests
         Assert.AreEqual(workspace.PathOf(@"Pages\Admin"), admin.FullPath);
         Assert.AreEqual(1, services.SourceFileCount);
         Assert.AreEqual(1, services.MemberCount);
+    }
+
+    /// <summary>
+    /// プロジェクト解析後のメンバー相対パスがフォルダ付きで保存されることを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Project_analyzer_assigns_project_relative_paths_to_members()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Pages\Admin\Edit.cshtml.cs", "public class EditModel { public void OnGet() {} }");
+        var cacheDir = workspace.CreateDirectory("cache");
+
+        var analyzer = new ProjectAnalyzer(new ProjectSourceResolver(), new RoslynSourceMemberParser(), new ProjectCacheService(cacheDir));
+        var analysis = await analyzer.AnalyzeAsync(project);
+
+        Assert.IsTrue(analysis.Members.Any(member => member.RelativePath == @"Pages\Admin\Edit.cshtml.cs"));
     }
 
     /// <summary>

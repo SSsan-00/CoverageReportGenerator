@@ -41,7 +41,7 @@ public sealed class ProjectFolderTreeBuilder
 
         foreach (var member in analysis.Members)
         {
-            var folderPath = RelativeFolderOf(member.RelativePath);
+            var folderPath = RelativeFolderOf(RelativePathOfMember(analysis, member));
             foreach (var ancestor in AncestorsOf(folderPath))
             {
                 GetOrCreate(folders, ancestor).MemberCount++;
@@ -49,6 +49,25 @@ public sealed class ProjectFolderTreeBuilder
         }
 
         return BuildNode(analysis, folders, string.Empty);
+    }
+
+    private static string RelativePathOfMember(ProjectAnalysis analysis, SourceMember member)
+    {
+        try
+        {
+            if (PathUtilities.IsDescendantOrSame(analysis.ProjectRoot, member.FilePath))
+            {
+                return PathUtilities.GetRelativePath(analysis.ProjectRoot, member.FilePath);
+            }
+        }
+        catch (ArgumentException)
+        {
+        }
+        catch (NotSupportedException)
+        {
+        }
+
+        return member.RelativePath;
     }
 
     private static FolderAccumulator GetOrCreate(

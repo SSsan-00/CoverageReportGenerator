@@ -38,7 +38,8 @@ public sealed class ProjectAnalyzer
         var cached = await _cache.LoadAsync(snapshot, cancellationToken);
         if (cached is not null && _cache.IsProjectMetadataValid(snapshot, cached))
         {
-            return new ProjectAnalysis(snapshot.ProjectPath, snapshot.ProjectName, snapshot.ProjectRoot, snapshot.SourceFiles, cached.Members, ProjectCacheStatus.Valid);
+            var cachedMembers = NormalizeMemberRelativePaths(snapshot, cached.Members);
+            return new ProjectAnalysis(snapshot.ProjectPath, snapshot.ProjectName, snapshot.ProjectRoot, snapshot.SourceFiles, cachedMembers, ProjectCacheStatus.Valid);
         }
 
         var changedMembers = new List<SourceMember>();
@@ -56,27 +57,38 @@ public sealed class ProjectAnalyzer
 
             if (canReuse)
             {
-                reusableMembers.AddRange(cached!.Members.Where(member => PathUtilities.PathComparer.Equals(member.FilePath, file.FullPath)));
+                reusableMembers.AddRange(cached!.Members
+                    .Where(member => PathUtilities.PathComparer.Equals(member.FilePath, file.FullPath))
+                    .Select(member => member with { RelativePath = file.RelativePath }));
                 continue;
             }
 
             progress?.Report(new ProjectAnalysisProgress($"解析中: {file.RelativePath}"));
             if (file.Extension.Equals(".cs", StringComparison.OrdinalIgnoreCase))
             {
-                changedMembers.AddRange(await _memberParser.ParseFileAsync(file.FullPath, cancellationToken));
+                var parsedMembers = await _memberParser.ParseFileAsync(file.FullPath, cancellationToken);
+                changedMembers.AddRange(parsedMembers.Select(member => member with { RelativePath = file.RelativePath }));
             }
         }
 
-        var members = reusableMembers
-            .Concat(changedMembers)
-            .OrderBy(member => member.RelativePath, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(member => member.StartLine)
-            .ToList();
+        var members = NormalizeMemberRelativePaths(snapshot, reusableMembers.Concat(changedMembers));
 
         var status = cached is null ? ProjectCacheStatus.Created : ProjectCacheStatus.Updated;
         var analysis = new ProjectAnalysis(snapshot.ProjectPath, snapshot.ProjectName, snapshot.ProjectRoot, snapshot.SourceFiles, members, status);
         await _cache.SaveAsync(_cache.CreateEntry(analysis), cancellationToken);
         return analysis;
+    }
+
+    private static IReadOnlyList<SourceMember> NormalizeMemberRelativePaths(ProjectSourceSnapshot snapshot, IEnumerable<SourceMember> members)
+    {
+        var sourceFiles = snapshot.SourceFiles.ToDictionary(file => file.FullPath, PathUtilities.PathComparer);
+        return members
+            .Select(member => sourceFiles.TryGetValue(member.FilePath, out var file)
+                ? member with { RelativePath = file.RelativePath }
+                : member)
+            .OrderBy(member => member.RelativePath, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(member => member.StartLine)
+            .ToList();
     }
 }
 
