@@ -66,23 +66,41 @@ public sealed class ExcelReportGenerationTests
         using var workbook = new XLWorkbook(result.OutputPath);
         var worksheet = workbook.Worksheet("Coverage");
         Assert.AreEqual(0, worksheet.SheetView.SplitRow);
-        Assert.IsTrue(worksheet.Column(2).Width >= 140);
-        Assert.IsTrue(worksheet.Column(3).Width >= 22);
+        Assert.IsFalse(worksheet.AutoFilter.IsEnabled);
+        Assert.IsTrue(worksheet.Column(2).Width >= 10);
+        Assert.IsTrue(worksheet.Column(3).Width >= 140);
         Assert.AreEqual("カバレッジレポート", worksheet.Cell(1, 1).GetString());
         Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.GetString().Contains('■')));
-        Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 1 && cell.GetString() == "※"));
-        Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 2 && cell.GetString().Contains("var uncovered = 2;")));
+        Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 2 && cell.GetString() == "※"));
+        var memberHeaderRow = worksheet.CellsUsed().Single(cell => cell.GetString() == "メンバー一覧").Address.RowNumber + 1;
+        Assert.AreEqual("メンバー", worksheet.Cell(memberHeaderRow, 1).GetString());
+        Assert.AreEqual("種別", worksheet.Cell(memberHeaderRow, 6).GetString());
+        Assert.AreEqual("クラス", worksheet.Cell(memberHeaderRow, 7).GetString());
+        var sourceHeaderRow = worksheet.CellsUsed().Single(cell => cell.Address.ColumnNumber == 1 && cell.GetString() == "ソース").Address.RowNumber + 1;
+        Assert.AreEqual("行番号", worksheet.Cell(sourceHeaderRow, 1).GetString());
+        Assert.AreEqual("未カバー", worksheet.Cell(sourceHeaderRow, 2).GetString());
+        Assert.AreEqual("本文", worksheet.Cell(sourceHeaderRow, 3).GetString());
+        var uncoveredSourceCell = worksheet.CellsUsed().Single(cell => cell.Address.ColumnNumber == 3 && cell.GetString().Contains("var uncovered = 2;"));
+        Assert.AreEqual("6", worksheet.Cell(uncoveredSourceCell.Address.RowNumber, 1).GetString());
+        Assert.AreEqual("※", worksheet.Cell(uncoveredSourceCell.Address.RowNumber, 2).GetString());
+        var coveredSourceCell = worksheet.CellsUsed().Single(cell => cell.Address.ColumnNumber == 3 && cell.GetString().Contains("var covered = 1;"));
+        var coveredMarkerCell = worksheet.Cell(coveredSourceCell.Address.RowNumber, 2);
+        Assert.AreEqual(string.Empty, coveredMarkerCell.GetString());
+        Assert.IsFalse(worksheet.CellsUsed(XLCellsUsedOptions.Contents).Any(cell =>
+            cell.Address.RowNumber == coveredMarkerCell.Address.RowNumber &&
+            cell.Address.ColumnNumber == coveredMarkerCell.Address.ColumnNumber));
 
-        var memberCell = worksheet.CellsUsed().Single(cell => cell.GetString() == "OnGet");
+        var memberCell = worksheet.Cell(memberHeaderRow + 1, 1);
+        Assert.AreEqual("OnGet", memberCell.GetString());
         Assert.IsTrue(worksheet.Hyperlinks.TryGet(memberCell.Address, out var hyperlink));
         Assert.IsFalse(hyperlink.IsExternal);
-        StringAssert.Contains(hyperlink.InternalAddress, "!B");
+        StringAssert.Contains(hyperlink.InternalAddress, "!C");
         Assert.AreEqual("3行へ移動", hyperlink.Tooltip);
 
         var targetAddress = hyperlink.InternalAddress.Split('!')[^1];
         var targetCell = worksheet.Cell(targetAddress);
         StringAssert.Contains(targetCell.GetString(), "public void OnGet()");
         Assert.IsFalse(targetCell.GetString().Contains("OnGet();", StringComparison.Ordinal));
-        Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 2 && cell.GetString().Contains("OnGet();")));
+        Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 3 && cell.GetString().Contains("OnGet();")));
     }
 }

@@ -63,7 +63,7 @@ public sealed class ExcelFileCoverageReportRenderer
         worksheet.Cell(row, 1).Value = "メンバー一覧";
         worksheet.Range(row, 1, row, 7).Merge().Style.Font.SetBold();
         row++;
-        Header(worksheet, row, ["種別", "クラス", "メンバー", "カバレッジ", "バー", "Statement", "行"]);
+        Header(worksheet, row, ["メンバー", "カバレッジ", "バー", "Statement", "行", "種別", "クラス"]);
 
         var members = report.Members
             .Where(member => PathUtilities.PathComparer.Equals(member.FilePath, file.FullPath))
@@ -75,13 +75,13 @@ public sealed class ExcelFileCoverageReportRenderer
         foreach (var member in members)
         {
             row++;
-            worksheet.Cell(row, 1).Value = MemberKindLabel(member.Kind.ToString());
-            worksheet.Cell(row, 2).Value = member.ContainingType;
-            worksheet.Cell(row, 3).Value = member.DisplayName;
-            WriteCoverageCell(worksheet.Cell(row, 4), member.Summary);
-            WriteCoverageBarCell(worksheet.Cell(row, 5), member.Summary);
-            worksheet.Cell(row, 6).Value = $"{member.Summary.CoveredStatements}/{member.Summary.TotalStatements}";
-            worksheet.Cell(row, 7).Value = $"{member.StartLine}-{member.EndLine}";
+            worksheet.Cell(row, 1).Value = member.DisplayName;
+            WriteCoverageCell(worksheet.Cell(row, 2), member.Summary);
+            WriteCoverageBarCell(worksheet.Cell(row, 3), member.Summary);
+            worksheet.Cell(row, 4).Value = $"{member.Summary.CoveredStatements}/{member.Summary.TotalStatements}";
+            worksheet.Cell(row, 5).Value = $"{member.StartLine}-{member.EndLine}";
+            worksheet.Cell(row, 6).Value = MemberKindLabel(member.Kind.ToString());
+            worksheet.Cell(row, 7).Value = member.ContainingType;
             ApplyCoverageRowStyle(worksheet.Range(row, 1, row, 7), member.Summary);
             memberRows.Add((member, row));
         }
@@ -90,18 +90,22 @@ public sealed class ExcelFileCoverageReportRenderer
         worksheet.Cell(row, 1).Value = "ソース";
         worksheet.Range(row, 1, row, 2).Merge().Style.Font.SetBold();
         row++;
-        Header(worksheet, row, ["未", "ソース"]);
+        Header(worksheet, row, ["行番号", "未カバー", "本文"]);
         row++;
 
-        var sourceStartRow = row;
         var sourceRowsByLine = new Dictionary<int, int>();
         foreach (var line in file.Lines)
         {
             sourceRowsByLine[line.LineNumber] = row;
-            worksheet.Cell(row, 1).Value = line.Status == LineCoverageStatus.Uncovered ? "※" : string.Empty;
-            worksheet.Cell(row, 2).Value = $"{line.LineNumber,4}: {line.Text}";
-            worksheet.Cell(row, 2).Style.Font.FontName = "Consolas";
-            ApplyLineStyle(worksheet.Range(row, 1, row, 2), line.Status);
+            worksheet.Cell(row, 1).Value = line.LineNumber;
+            if (line.Status == LineCoverageStatus.Uncovered)
+            {
+                worksheet.Cell(row, 2).Value = "※";
+            }
+
+            worksheet.Cell(row, 3).Value = line.Text;
+            worksheet.Cell(row, 3).Style.Font.FontName = "Consolas";
+            ApplyLineStyle(worksheet.Range(row, 1, row, 3), line.Status);
             row++;
         }
 
@@ -121,23 +125,22 @@ public sealed class ExcelFileCoverageReportRenderer
                 continue;
             }
 
-            var memberCell = worksheet.Cell(row, 3);
-            memberCell.SetHyperlink(new XLHyperlink(worksheet.Cell(sourceRow, 2), $"{member.StartLine}行へ移動"));
+            var memberCell = worksheet.Cell(row, 1);
+            memberCell.SetHyperlink(new XLHyperlink(worksheet.Cell(sourceRow, 3), $"{member.StartLine}行へ移動"));
         }
     }
 
     private static void ApplyWorksheetStyle(IXLWorksheet worksheet)
     {
         worksheet.Columns(1, 7).AdjustToContents();
-        EnsureColumnWidth(worksheet.Column(1), 5, 12);
-        EnsureColumnWidth(worksheet.Column(2), 140, 180);
-        EnsureColumnWidth(worksheet.Column(3), 22, 80);
+        EnsureColumnWidth(worksheet.Column(1), 18, 80);
+        EnsureColumnWidth(worksheet.Column(2), 10, 20);
+        EnsureColumnWidth(worksheet.Column(3), 140, 180);
         EnsureColumnWidth(worksheet.Column(4), 12, 20);
         EnsureColumnWidth(worksheet.Column(5), 18, 24);
-        EnsureColumnWidth(worksheet.Column(6), 12, 20);
-        EnsureColumnWidth(worksheet.Column(7), 10, 18);
+        EnsureColumnWidth(worksheet.Column(6), 14, 24);
+        EnsureColumnWidth(worksheet.Column(7), 22, 80);
         worksheet.RangeUsed()!.Style.Alignment.Vertical = XLAlignmentVerticalValues.Top;
-        worksheet.RangeUsed()?.SetAutoFilter();
     }
 
     private static void EnsureColumnWidth(IXLColumn column, double minimumWidth, double maximumWidth)
@@ -166,7 +169,7 @@ public sealed class ExcelFileCoverageReportRenderer
         else if (status == LineCoverageStatus.Uncovered)
         {
             range.Style.Fill.SetBackgroundColor(UncoveredColor);
-            range.FirstCell().Style.Font.SetFontColor(XLColor.Red).Font.SetBold();
+            range.Cell(1, 2).Style.Font.SetFontColor(XLColor.Red).Font.SetBold();
         }
     }
 
