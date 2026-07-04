@@ -351,9 +351,10 @@ src/CoverageReportGenerator.WinForms/bin/Release/net8.0-windows/win-x64/publish/
 1. public リポジトリの zip を取得する
 2. WinForms アプリを publish する
 3. 出力先へ `CoverageReportGenerator.exe` を配置する
-4. テストコードを含む `source/` を展開する
+4. テストコードとドキュメントを含む `source/` を展開する
 5. `bin`、`obj`、`.git`、`artifacts` などは除外する
-6. `bootstrap/`、`docs/`、`README.md` も除外する
+6. `bootstrap/` は除外する
+7. `source/` の `README.md` と `docs/*.md` から Bootstrap に関する章と説明行を省く
 
 bootstrap の成果物には bootstrap に関する成果物や説明を残しません。bootstrap の利用説明は、このリポジトリ側の README と docs だけに記載します。
 

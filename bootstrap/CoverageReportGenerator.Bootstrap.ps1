@@ -78,9 +78,53 @@ function Copy-SourceTree {
         Remove-Item -LiteralPath $targetFullPath -Recurse -Force
     }
 
-    $excludedDirectoryNames = @(".git", ".vs", "bin", "obj", "artifacts", "bootstrap", "docs")
-    $excludedFileNames = @("README.md")
+    $excludedDirectoryNames = @(".git", ".vs", "bin", "obj", "artifacts", "bootstrap")
     New-Item -ItemType Directory -Force -Path $targetFullPath | Out-Null
+
+    function Remove-BootstrapDocumentation {
+        param([string]$Text)
+
+        $lines = $Text -split "`r?`n"
+        $output = New-Object System.Collections.Generic.List[string]
+        $skipHeadingLevel = 0
+
+        foreach ($line in $lines) {
+            $headingMatch = [regex]::Match($line, '^(#{1,6})\s+(.+)$')
+            if ($headingMatch.Success) {
+                $level = $headingMatch.Groups[1].Value.Length
+                $title = $headingMatch.Groups[2].Value
+                if ($skipHeadingLevel -gt 0 -and $level -le $skipHeadingLevel) {
+                    $skipHeadingLevel = 0
+                }
+
+                if ($skipHeadingLevel -eq 0 -and $title -match '(?i)bootstrap') {
+                    $skipHeadingLevel = $level
+                    continue
+                }
+            }
+
+            if ($skipHeadingLevel -gt 0 -or $line -match '(?i)bootstrap') {
+                continue
+            }
+
+            $output.Add($line)
+        }
+
+        return ($output -join [Environment]::NewLine).TrimEnd() + [Environment]::NewLine
+    }
+
+    function Test-IsDocumentationFile {
+        param([string]$Path)
+
+        $fullPath = [System.IO.Path]::GetFullPath($Path)
+        $relative = $fullPath.Substring($sourceFullPath.Length).TrimStart(
+            [System.IO.Path]::DirectorySeparatorChar,
+            [System.IO.Path]::AltDirectorySeparatorChar)
+        $relative = $relative.Replace([System.IO.Path]::AltDirectorySeparatorChar, [System.IO.Path]::DirectorySeparatorChar)
+        return $relative.Equals("README.md", [System.StringComparison]::OrdinalIgnoreCase) -or
+            ($relative.StartsWith("docs" + [System.IO.Path]::DirectorySeparatorChar, [System.StringComparison]::OrdinalIgnoreCase) -and
+                [System.IO.Path]::GetExtension($relative).Equals(".md", [System.StringComparison]::OrdinalIgnoreCase))
+    }
 
     function Copy-DirectoryContent {
         param(
@@ -106,11 +150,14 @@ function Copy-SourceTree {
                 continue
             }
 
-            if ($excludedFileNames -contains $item.Name) {
+            $destination = Join-Path $CurrentTarget $item.Name
+            if (Test-IsDocumentationFile -Path $item.FullName) {
+                $text = [System.IO.File]::ReadAllText($item.FullName, [System.Text.Encoding]::UTF8)
+                [System.IO.File]::WriteAllText($destination, (Remove-BootstrapDocumentation -Text $text), [System.Text.Encoding]::UTF8)
                 continue
             }
 
-            Copy-Item -LiteralPath $item.FullName -Destination (Join-Path $CurrentTarget $item.Name) -Force
+            Copy-Item -LiteralPath $item.FullName -Destination $destination -Force
         }
     }
 

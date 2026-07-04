@@ -95,12 +95,7 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
         "bin",
         "obj",
         "artifacts",
-        "bootstrap",
-        "docs"
-    };
-    var excludedFileNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-    {
-        "README.md"
+        "bootstrap"
     };
 
     // 出力先配下を再帰コピー対象から外し、自己コピーを防ぐ。
@@ -127,14 +122,61 @@ static void CopySourceTree(string sourceRoot, string targetRoot, string outputRo
         foreach (var file in Directory.EnumerateFiles(currentSource))
         {
             var fileName = Path.GetFileName(file);
-            if (excludedFileNames.Contains(fileName))
+            var destination = Path.Combine(currentTarget, fileName);
+            if (IsDocumentationFile(sourceFullPath, file))
             {
+                var text = File.ReadAllText(file);
+                File.WriteAllText(destination, RemoveBootstrapDocumentation(text));
                 continue;
             }
 
-            File.Copy(file, Path.Combine(currentTarget, fileName), overwrite: true);
+            File.Copy(file, destination, overwrite: true);
         }
     }
+}
+
+static bool IsDocumentationFile(string sourceRoot, string path)
+{
+    var relative = Path.GetRelativePath(sourceRoot, path);
+    return relative.Equals("README.md", StringComparison.OrdinalIgnoreCase) ||
+        (relative.StartsWith($"docs{Path.DirectorySeparatorChar}", StringComparison.OrdinalIgnoreCase) &&
+            Path.GetExtension(relative).Equals(".md", StringComparison.OrdinalIgnoreCase));
+}
+
+static string RemoveBootstrapDocumentation(string text)
+{
+    var lines = System.Text.RegularExpressions.Regex.Split(text, "\r?\n");
+    var output = new List<string>();
+    var skipHeadingLevel = 0;
+
+    foreach (var line in lines)
+    {
+        var headingMatch = System.Text.RegularExpressions.Regex.Match(line, "^(#{1,6})\\s+(.+)$");
+        if (headingMatch.Success)
+        {
+            var level = headingMatch.Groups[1].Value.Length;
+            var title = headingMatch.Groups[2].Value;
+            if (skipHeadingLevel > 0 && level <= skipHeadingLevel)
+            {
+                skipHeadingLevel = 0;
+            }
+
+            if (skipHeadingLevel == 0 && title.Contains("bootstrap", StringComparison.OrdinalIgnoreCase))
+            {
+                skipHeadingLevel = level;
+                continue;
+            }
+        }
+
+        if (skipHeadingLevel > 0 || line.Contains("bootstrap", StringComparison.OrdinalIgnoreCase))
+        {
+            continue;
+        }
+
+        output.Add(line);
+    }
+
+    return string.Join(Environment.NewLine, output).TrimEnd() + Environment.NewLine;
 }
 
 static bool IsChildPath(string childPath, string parentPath)

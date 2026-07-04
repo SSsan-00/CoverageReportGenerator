@@ -71,9 +71,9 @@ dotnet publish src\CoverageReportGenerator.WinForms\CoverageReportGenerator.WinF
 .\bootstrap\CoverageReportGenerator.Bootstrap.ps1 -Output .\dist
 ```
 
-bootstrap は public リポジトリの zip をダウンロードし、WinForms アプリを publish します。出力先には `CoverageReportGenerator.exe` と、テストコードを含む `source/` フォルダを作成します。
+bootstrap は public リポジトリの zip をダウンロードし、WinForms アプリを publish します。出力先には `CoverageReportGenerator.exe` と、テストコードとドキュメントを含む `source/` フォルダを作成します。
 
-bootstrap の成果物には `bootstrap/`、`docs/`、`README.md` は含めません。bootstrap に関する説明は、このリポジトリ側のドキュメントだけに残します。
+bootstrap の成果物には `bootstrap/` は含めません。`source/` にコピーする `README.md` と `docs/*.md` からは、Bootstrap に関する章と説明行を省きます。
 
 ## ライセンス
 
