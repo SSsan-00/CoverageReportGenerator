@@ -393,6 +393,9 @@ public sealed class ReportGenerationTests
         StringAssert.Contains(html, "style=\"width:0%\"");
         StringAssert.Contains(html, "src-file-1-line-6");
         StringAssert.Contains(html, "jumpToSource(1, 4)");
+        Assert.IsFalse(html.Contains("<th>ソース</th>", StringComparison.Ordinal));
+        Assert.IsFalse(html.Contains("<td>あり</td>", StringComparison.Ordinal));
+        Assert.IsFalse(html.Contains("<td>なし</td>", StringComparison.Ordinal));
         Assert.IsFalse(html.Contains("Partial", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(html.Contains("Raw", StringComparison.OrdinalIgnoreCase));
         Assert.IsFalse(html.Contains("Coverage Tree", StringComparison.OrdinalIgnoreCase));

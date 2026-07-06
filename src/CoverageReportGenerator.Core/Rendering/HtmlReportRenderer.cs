@@ -208,14 +208,14 @@ public sealed class HtmlReportRenderer
     private static void RenderFiles(StringBuilder html, CoverageReport report)
     {
         html.AppendLine("<div class=\"panel-heading\"><h2>ファイル</h2><input class=\"filter\" placeholder=\"ファイルを絞り込み\" data-filter-table=\"files-table\"></div>");
-        html.AppendLine("<table id=\"files-table\" class=\"files-table\"><thead><tr><th>カバレッジ</th><th>Statement</th><th>ファイル</th><th>ソース</th></tr></thead><tbody>");
+        html.AppendLine("<table id=\"files-table\" class=\"files-table\"><thead><tr><th>カバレッジ</th><th>Statement</th><th>ファイル</th></tr></thead><tbody>");
         foreach (var file in report.Files)
         {
             html.Append("<tr class=\"coverage-row coverage-file-row coverage-").Append(CoverageLevel(file.Summary)).Append("\"><td>");
             CoverageVisual(html, file.Summary);
             html.Append("</td><td>").Append(Statements(file.Summary)).Append("</td><td>");
             LinkToSource(html, file.FileId, 1, file.RelativePath);
-            html.Append("</td><td>").Append(file.SourceFound ? "あり" : "なし").AppendLine("</td></tr>");
+            html.AppendLine("</td></tr>");
         }
 
         html.AppendLine("</tbody></table>");
