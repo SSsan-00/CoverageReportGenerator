@@ -84,7 +84,7 @@ public sealed class ExcelReportGenerationTests
         Assert.AreEqual(@"Pages\Index.cshtml.cs", result.Report.Files[0].RelativePath);
         Assert.IsFalse(result.Report.Files.Any(file => file.RelativePath == @"Pages\Other.cshtml.cs"));
         using var workbook = new XLWorkbook(result.OutputPath);
-        var worksheet = workbook.Worksheet("Coverage");
+        var worksheet = workbook.Worksheet("Index.cshtml.cs");
         Assert.AreEqual(0, worksheet.SheetView.SplitRow);
         Assert.IsFalse(worksheet.AutoFilter.IsEnabled);
         Assert.IsTrue(worksheet.Column(2).Width >= 10);

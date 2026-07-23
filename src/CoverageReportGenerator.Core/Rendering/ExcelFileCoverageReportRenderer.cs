@@ -54,16 +54,16 @@ public sealed class ExcelFileCoverageReportRenderer
         foreach (var report in reports)
         {
             var file = report.Files[0];
-            var worksheet = workbook.Worksheets.Add(SheetNameFor(file.RelativePath, usedSheetNames, reports.Count == 1));
+            var worksheet = workbook.Worksheets.Add(SheetNameFor(file.RelativePath, usedSheetNames));
             RenderWorksheet(worksheet, report, file);
         }
 
         workbook.SaveAs(outputPath);
     }
 
-    private static string SheetNameFor(string relativePath, ISet<string> usedSheetNames, bool singleSheet)
+    private static string SheetNameFor(string relativePath, ISet<string> usedSheetNames)
     {
-        var baseName = singleSheet ? "Coverage" : Path.GetFileName(relativePath);
+        var baseName = Path.GetFileName(relativePath);
         baseName = SanitizeSheetName(baseName);
         var sheetName = TruncateSheetName(baseName);
         var suffix = 2;
