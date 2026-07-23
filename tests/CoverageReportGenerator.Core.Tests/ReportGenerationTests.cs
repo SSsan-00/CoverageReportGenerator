@@ -198,6 +198,67 @@ public sealed class ReportGenerationTests
     }
 
     /// <summary>
+    /// コンパイラ生成ネスト型のStatementが親Type集計へ含まれ、dotCoverのCoveragePercentが使われることを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Report_builder_rolls_compiler_generated_nested_type_statements_into_parent_type_summary()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        workspace.Write(@"Services\ProductCatalogService.cs", """
+            namespace Sample.Services;
+            public class ProductCatalogService
+            {
+                public void Search()
+                {
+                    var covered = 1;
+                    var uncovered = 2;
+                    var values = new[] { 1 }.Where(value => value > 0).ToList();
+                }
+            }
+            """);
+        var xml = """
+            <Root CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+              <FileIndices><File Index="1" Name="Services\ProductCatalogService.cs" /></FileIndices>
+              <Assembly Name="Sample.Web" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                <Namespace Name="Sample.Services" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                  <Type Name="ProductCatalogService" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                    <Type Name="&lt;&gt;c" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                      <Method Name="&lt;Search&gt;b__0(System.Int32):System.Boolean" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                        <Statement FileIndex="1" Line="8" Covered="True" />
+                      </Method>
+                    </Type>
+                    <Method Name="Search():System.Void" CoveredStatements="1" TotalStatements="2" CoveragePercent="50">
+                      <Statement FileIndex="1" Line="6" Covered="True" />
+                      <Statement FileIndex="1" Line="7" Covered="False" />
+                    </Method>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = await BuildReportAsync(project, xml);
+
+        var tree = report.Tree.Flatten().ToList();
+        var type = tree.Single(item => item.Kind == CoverageTreeKind.Type && item.Name == "ProductCatalogService");
+        Assert.AreEqual(2, type.Summary.CoveredStatements);
+        Assert.AreEqual(3, type.Summary.TotalStatements);
+        Assert.AreEqual(67, type.Summary.CoveragePercent);
+        var ns = tree.Single(item => item.Kind == CoverageTreeKind.Namespace && item.Name == "Sample.Services");
+        Assert.AreEqual(67, ns.Summary.CoveragePercent);
+        Assert.IsFalse(tree.Any(item => item.Kind == CoverageTreeKind.Type && item.Name == "<>c"));
+        var file = report.Files.Single();
+        Assert.AreEqual(2, file.Summary.CoveredStatements);
+        Assert.AreEqual(3, file.Summary.TotalStatements);
+        Assert.AreEqual(LineCoverageStatus.Covered, file.Lines.Single(line => line.LineNumber == 8).Status);
+    }
+
+    /// <summary>
     /// 複数行Statementの全行が同じカバレッジ状態になることを検証する。
     /// </summary>
     [TestMethod]

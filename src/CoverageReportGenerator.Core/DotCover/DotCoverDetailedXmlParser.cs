@@ -117,6 +117,9 @@ public sealed class DotCoverDetailedXmlParser
             throw new DotCoverParseException($"Statement EndLine must be greater than or equal to Line. Line: '{line}', EndLine: '{endLine}'.");
         }
 
+        var assembly = FindAncestor(element, "Assembly");
+        var namespaceElement = FindAncestor(element, "Namespace");
+        var type = FindLogicalTypeAncestor(element);
         var method = FindAncestor(element, "Method");
         var methodKey = method is not null && methodKeys.TryGetValue(method, out var key) ? key : null;
 
@@ -124,15 +127,18 @@ public sealed class DotCoverDetailedXmlParser
             fileIndex,
             line,
             covered,
-            FindAncestorName(element, "Assembly", "Unknown Assembly"),
-            FindAncestorName(element, "Namespace", "Unknown Namespace"),
-            FindAncestorName(element, "Type", "Unknown Type"),
+            NameOrFallback(assembly, "Unknown Assembly"),
+            NameOrFallback(namespaceElement, "Unknown Namespace"),
+            NameOrFallback(type, "Unknown Type"),
             FindAncestorName(element, "Method", "Unknown Method"),
             OptionalPositiveInt(element, "Column"),
             endLine,
             OptionalPositiveInt(element, "EndColumn"),
             methodKey,
-            method is null ? null : ParseMetric(method));
+            method is null ? null : ParseMetric(method),
+            type is null ? null : ParseMetric(type),
+            namespaceElement is null ? null : ParseMetric(namespaceElement),
+            assembly is null ? null : ParseMetric(assembly));
     }
 
     private static CoverageMetric ParseMetric(XElement element)
@@ -157,8 +163,12 @@ public sealed class DotCoverDetailedXmlParser
     private static string FindAncestorName(XElement element, string ancestorLocalName, string fallback)
     {
         var match = FindAncestor(element, ancestorLocalName);
+        return NameOrFallback(match, fallback);
+    }
 
-        var value = match?.Attribute("Name")?.Value;
+    private static string NameOrFallback(XElement? element, string fallback)
+    {
+        var value = element?.Attribute("Name")?.Value;
         return string.IsNullOrWhiteSpace(value) ? fallback : value;
     }
 
@@ -166,6 +176,21 @@ public sealed class DotCoverDetailedXmlParser
     {
         return element.Ancestors()
             .FirstOrDefault(ancestor => ancestor.Name.LocalName == ancestorLocalName);
+    }
+
+    private static XElement? FindLogicalTypeAncestor(XElement element)
+    {
+        var types = element.Ancestors()
+            .Where(ancestor => ancestor.Name.LocalName == "Type")
+            .ToList();
+
+        return types.FirstOrDefault(type => !IsCompilerGeneratedTypeName(NameOrFallback(type, string.Empty)))
+            ?? types.FirstOrDefault();
+    }
+
+    private static bool IsCompilerGeneratedTypeName(string typeName)
+    {
+        return typeName.StartsWith("<", StringComparison.Ordinal);
     }
 
     private static int OptionalInt(XElement element, string name)

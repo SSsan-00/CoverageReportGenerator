@@ -109,6 +109,40 @@ public sealed class DotCoverDetailedXmlParserTests
     }
 
     /// <summary>
+    /// コンパイラ生成ネスト型のStatementを親の実Typeへ関連付けることを検証する。
+    /// </summary>
+    [TestMethod]
+    public void Parse_maps_compiler_generated_nested_type_statements_to_parent_type()
+    {
+        const string xml = """
+            <Root CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+              <FileIndices><File Index="1" Name="Services\ProductCatalogService.cs" /></FileIndices>
+              <Assembly Name="Sample.Web" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                <Namespace Name="Sample.Services" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                  <Type Name="ProductCatalogService" CoveredStatements="2" TotalStatements="3" CoveragePercent="67">
+                    <Type Name="&lt;&gt;c" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                      <Method Name="&lt;Search&gt;b__0(System.Int32):System.Boolean" CoveredStatements="1" TotalStatements="1" CoveragePercent="100">
+                        <Statement FileIndex="1" Line="10" Covered="True" />
+                      </Method>
+                    </Type>
+                  </Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """;
+
+        var report = new DotCoverDetailedXmlParser().Parse(xml);
+
+        var statement = report.Statements.Single();
+        Assert.AreEqual("ProductCatalogService", statement.TypeName);
+        Assert.AreEqual(2, statement.TypeMetric?.CoveredStatements);
+        Assert.AreEqual(3, statement.TypeMetric?.TotalStatements);
+        Assert.AreEqual(67m, statement.TypeMetric?.CoveragePercent);
+        Assert.AreEqual(2, statement.NamespaceMetric?.CoveredStatements);
+        Assert.AreEqual(2, statement.AssemblyMetric?.CoveredStatements);
+    }
+
+    /// <summary>
     /// Statement Covered属性がない場合に失敗することを検証する。
     /// </summary>
     [TestMethod]

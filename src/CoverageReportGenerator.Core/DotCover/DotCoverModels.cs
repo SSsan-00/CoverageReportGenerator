@@ -38,7 +38,10 @@ public sealed record DotCoverStatement(
     int? EndLine = null,
     int? EndColumn = null,
     string? MethodKey = null,
-    CoverageMetric? MethodMetric = null);
+    CoverageMetric? MethodMetric = null,
+    CoverageMetric? TypeMetric = null,
+    CoverageMetric? NamespaceMetric = null,
+    CoverageMetric? AssemblyMetric = null);
 
 /// <summary>
 /// dotCover XMLを解析できない場合の例外。

@@ -40,13 +40,14 @@ public sealed class CoverageReportBuilder
             .Select((file, index) => (file.FullPath, Id: index + 1))
             .ToDictionary(item => PathUtilities.NormalizeFullPath(item.FullPath), item => item.Id, PathUtilities.PathComparer);
 
+        var useDotCoverHierarchyMetrics = statements.Count == request.DotCover.Statements.Count;
         var memberReports = BuildMemberReports(statements, request.Project.Members, fileIds)
             .OrderBy(member => member.RelativePath, StringComparer.OrdinalIgnoreCase)
             .ThenBy(member => member.StartLine)
             .ToList();
 
         var files = BuildFileReports(targetSelection.IncludedFiles, statements, fileIds);
-        var tree = BuildTree(request.Project.ProjectName, statements, memberReports);
+        var tree = BuildTree(request.Project.ProjectName, request.DotCover.Root, statements, memberReports, useDotCoverHierarchyMetrics);
         var summary = BuildOverallSummary(request.DotCover, statements);
 
         return new CoverageReport(
@@ -106,7 +107,10 @@ public sealed class CoverageReportBuilder
             statement.TypeName,
             statement.MethodName,
             statement.MethodKey,
-            statement.MethodMetric);
+            statement.MethodMetric,
+            statement.TypeMetric,
+            statement.NamespaceMetric,
+            statement.AssemblyMetric);
     }
 
     private static SourceFile? MatchTargetPath(string fullPath, string projectRoot, IReadOnlyList<SourceFile> targetFiles)
@@ -287,12 +291,17 @@ public sealed class CoverageReportBuilder
 
     private static IReadOnlyList<CoverageTreeItem> BuildTree(
         string projectName,
+        CoverageMetric rootMetric,
         IReadOnlyList<ResolvedStatement> statements,
-        IReadOnlyList<MemberCoverageReport> members)
+        IReadOnlyList<MemberCoverageReport> members,
+        bool useDotCoverHierarchyMetrics)
     {
         var id = 0;
         var roots = new List<CoverageTreeItem>();
-        var project = CreateTreeItem(++id, null, CoverageTreeKind.Project, projectName, 0, statements, null, null);
+        var projectSummary = useDotCoverHierarchyMetrics && rootMetric.TotalStatements > 0
+            ? SummaryFromMetric(rootMetric)
+            : SummaryFromDistinctMethods(statements);
+        var project = CreateTreeItem(++id, null, CoverageTreeKind.Project, projectName, 0, projectSummary, null, null);
         roots.Add(project);
 
         var assemblies = statements.GroupBy(statement => statement.AssemblyName).OrderBy(group => group.Key);
@@ -300,16 +309,19 @@ public sealed class CoverageReportBuilder
         foreach (var assemblyGroup in assemblies)
         {
             // Assembly > Namespace > Type > Methodの順に、dotCover XMLの階層を保つ。
-            var assembly = CreateTreeItem(++id, project.Id, CoverageTreeKind.Assembly, assemblyGroup.Key, 1, assemblyGroup, null, null);
+            var assemblySummary = SummaryForHierarchy(assemblyGroup, statement => statement.AssemblyMetric, useDotCoverHierarchyMetrics);
+            var assembly = CreateTreeItem(++id, project.Id, CoverageTreeKind.Assembly, assemblyGroup.Key, 1, assemblySummary, null, null);
             var namespaceChildren = new List<CoverageTreeItem>();
             foreach (var namespaceGroup in assemblyGroup.GroupBy(statement => statement.NamespaceName).OrderBy(group => group.Key))
             {
-                var ns = CreateTreeItem(++id, assembly.Id, CoverageTreeKind.Namespace, namespaceGroup.Key, 2, namespaceGroup, null, null);
+                var namespaceSummary = SummaryForHierarchy(namespaceGroup, statement => statement.NamespaceMetric, useDotCoverHierarchyMetrics);
+                var ns = CreateTreeItem(++id, assembly.Id, CoverageTreeKind.Namespace, namespaceGroup.Key, 2, namespaceSummary, null, null);
                 var typeChildren = new List<CoverageTreeItem>();
                 foreach (var typeGroup in namespaceGroup.GroupBy(statement => statement.TypeName).OrderBy(group => group.Key))
                 {
-                    var type = CreateTreeItem(++id, ns.Id, CoverageTreeKind.Type, typeGroup.Key, 3, typeGroup, null, null);
-                    var methodChildren = BuildMethodTreeItems(ref id, type.Id, typeGroup, members);
+                    var typeSummary = SummaryForHierarchy(typeGroup, statement => statement.TypeMetric, useDotCoverHierarchyMetrics);
+                    var type = CreateTreeItem(++id, ns.Id, CoverageTreeKind.Type, typeGroup.Key, 3, typeSummary, null, null);
+                    var methodChildren = BuildMethodTreeItems(ref id, type.Id, typeGroup, members, useDotCoverHierarchyMetrics);
                     typeChildren.Add(type with { Children = methodChildren });
                 }
 
@@ -327,7 +339,8 @@ public sealed class CoverageReportBuilder
         ref int id,
         string parentId,
         IEnumerable<ResolvedStatement> statements,
-        IReadOnlyList<MemberCoverageReport> members)
+        IReadOnlyList<MemberCoverageReport> members,
+        bool useDotCoverHierarchyMetrics)
     {
         var methodMembers = new List<CoverageTreeItem>();
         var matchedStatements = new HashSet<ResolvedStatement>();
@@ -348,13 +361,14 @@ public sealed class CoverageReportBuilder
                 matchedStatements.Add(statement);
             }
 
-            methodMembers.Add(CreateTreeItem(++id, parentId, CoverageTreeKind.Method, member.DisplayName, 4, memberStatements, member.FileId, member.StartLine));
+            methodMembers.Add(CreateTreeItem(++id, parentId, CoverageTreeKind.Method, member.DisplayName, 4, member.Summary, member.FileId, member.StartLine));
         }
 
         foreach (var group in statements.Where(statement => !matchedStatements.Contains(statement)).GroupBy(statement => statement.MethodName).OrderBy(group => group.Key))
         {
             // Roslynで対応できないコンパイラ生成名はdotCover名のままMethodノードへ残す。
-            methodMembers.Add(CreateTreeItem(++id, parentId, CoverageTreeKind.Method, group.Key, 4, group, null, null));
+            var methodSummary = SummaryForHierarchy(group, statement => statement.MethodMetric, useDotCoverHierarchyMetrics);
+            methodMembers.Add(CreateTreeItem(++id, parentId, CoverageTreeKind.Method, group.Key, 4, methodSummary, null, null));
         }
 
         return methodMembers
@@ -370,20 +384,65 @@ public sealed class CoverageReportBuilder
         CoverageTreeKind kind,
         string name,
         int depth,
-        IEnumerable<ResolvedStatement> statements,
+        CoverageSummary summary,
         int? fileId,
         int? startLine)
     {
-        var materialized = statements.ToList();
         return new CoverageTreeItem(
             $"node-{number}",
             parentId,
             kind,
             name,
             depth,
-            SummaryFromDistinctMethods(materialized),
+            summary,
             fileId,
             startLine);
+    }
+
+    private static CoverageSummary SummaryForHierarchy(
+        IEnumerable<ResolvedStatement> statements,
+        Func<ResolvedStatement, CoverageMetric?> metricSelector,
+        bool useDotCoverHierarchyMetrics)
+    {
+        var materialized = statements.ToList();
+        if (useDotCoverHierarchyMetrics)
+        {
+            var metric = SingleMetric(materialized, metricSelector);
+            if (metric is not null && metric.TotalStatements > 0)
+            {
+                return SummaryFromMetric(metric);
+            }
+        }
+
+        return SummaryFromDistinctMethods(materialized);
+    }
+
+    private static CoverageMetric? SingleMetric(
+        IReadOnlyList<ResolvedStatement> statements,
+        Func<ResolvedStatement, CoverageMetric?> metricSelector)
+    {
+        CoverageMetric? result = null;
+        foreach (var statement in statements)
+        {
+            var metric = metricSelector(statement);
+            if (metric is null)
+            {
+                return null;
+            }
+
+            result ??= metric;
+            if (result != metric)
+            {
+                return null;
+            }
+        }
+
+        return result;
+    }
+
+    private static CoverageSummary SummaryFromMetric(CoverageMetric metric)
+    {
+        return new CoverageSummary(metric.CoveredStatements, metric.TotalStatements, metric.CoveragePercent);
     }
 
     private static CoverageSummary SummaryFromDistinctMethods(IReadOnlyList<ResolvedStatement> statements)
@@ -484,7 +543,10 @@ public sealed class CoverageReportBuilder
         string TypeName,
         string MethodName,
         string? MethodKey,
-        CoverageMetric? MethodMetric);
+        CoverageMetric? MethodMetric,
+        CoverageMetric? TypeMetric,
+        CoverageMetric? NamespaceMetric,
+        CoverageMetric? AssemblyMetric);
 
     private sealed record SourceLineRange(int StartLine, int EndLine);
 }
