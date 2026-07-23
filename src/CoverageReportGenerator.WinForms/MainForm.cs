@@ -638,12 +638,12 @@ public sealed class MainForm : Form
         }
 
         using var fileDialog = new FileSelectionDialog(_analysis.SourceFiles, _analysis.Members);
-        if (fileDialog.ShowDialog(this) != DialogResult.OK || fileDialog.SelectedSourceFile is null)
+        if (fileDialog.ShowDialog(this) != DialogResult.OK || fileDialog.SelectedSourceFiles.Count == 0)
         {
             return;
         }
 
-        var sourceFile = fileDialog.SelectedSourceFile;
+        var sourceFiles = fileDialog.SelectedSourceFiles.ToList();
         var outputDirectory = string.IsNullOrWhiteSpace(_outputDirectory.Text)
             ? Path.Combine(_analysis.ProjectRoot, "coverage-report")
             : _outputDirectory.Text;
@@ -653,7 +653,9 @@ public sealed class MainForm : Form
         {
             Filter = "Excelブック (*.xlsx)|*.xlsx",
             Title = "Excelレポートの保存先を選択",
-            FileName = $"{Path.GetFileNameWithoutExtension(sourceFile.FullPath)}-coverage.xlsx",
+            FileName = sourceFiles.Count == 1
+                ? $"{Path.GetFileNameWithoutExtension(sourceFiles[0].FullPath)}-coverage.xlsx"
+                : $"{_analysis.ProjectName}-coverage.xlsx",
             InitialDirectory = outputDirectory,
             OverwritePrompt = true
         };
@@ -670,12 +672,12 @@ public sealed class MainForm : Form
             var result = await service.GenerateAsync(new ExcelReportGenerationOptions(
                 _projectPath.Text,
                 _xmlPath.Text,
-                sourceFile.FullPath,
+                sourceFiles.Select(file => file.FullPath).ToList(),
                 saveDialog.FileName,
                 ImplicitIncludePatterns,
                 ImplicitExcludePatterns), new Progress<string>(Log));
 
-            Log($"Excelレポートを生成しました: {result.OutputPath}");
+            Log($"Excelレポートを生成しました: {result.OutputPath} ({result.Reports.Count}シート)");
             if (_openAfterGeneration.Checked)
             {
                 Process.Start(new ProcessStartInfo(result.OutputPath) { UseShellExecute = true });

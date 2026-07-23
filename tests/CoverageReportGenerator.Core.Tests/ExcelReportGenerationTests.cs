@@ -123,4 +123,83 @@ public sealed class ExcelReportGenerationTests
         Assert.IsFalse(targetCell.GetString().Contains("OnGet();", StringComparison.Ordinal));
         Assert.IsTrue(worksheet.CellsUsed().Any(cell => cell.Address.ColumnNumber == 3 && cell.GetString().Contains("OnGet();")));
     }
+
+    /// <summary>
+    /// 複数ファイルを選択した場合にファイルごとのシートを持つExcelブックを生成することを検証する。
+    /// </summary>
+    [TestMethod]
+    public async Task Excel_report_outputs_selected_files_as_separate_sheets()
+    {
+        using var workspace = TestWorkspace.Create();
+        var project = workspace.Write("Sample.Web.csproj", """
+            <Project Sdk="Microsoft.NET.Sdk.Web">
+              <PropertyGroup><TargetFramework>net8.0</TargetFramework></PropertyGroup>
+            </Project>
+            """);
+        var index = workspace.Write(@"Pages\Index.cshtml.cs", """
+            public class IndexModel
+            {
+                public void OnGet()
+                {
+                    var index = 1;
+                }
+            }
+            """);
+        var details = workspace.Write(@"Pages\Products\Details.cshtml.cs", """
+            public class DetailsModel
+            {
+                public void OnGet()
+                {
+                    var details = 1;
+                }
+            }
+            """);
+        workspace.Write(@"Pages\Products\Edit.cshtml.cs", """
+            public class EditModel
+            {
+                public void OnGet()
+                {
+                    var edit = 1;
+                }
+            }
+            """);
+        var xml = workspace.Write("dotcover.xml", """
+            <Root CoveredStatements="2" TotalStatements="3" CoveragePercent="66.7">
+              <FileIndices>
+                <File Index="1" Name="Pages\Index.cshtml.cs" />
+                <File Index="2" Name="Pages\Products\Details.cshtml.cs" />
+                <File Index="3" Name="Pages\Products\Edit.cshtml.cs" />
+              </FileIndices>
+              <Assembly Name="Sample.Web">
+                <Namespace Name="Sample.Pages">
+                  <Type Name="IndexModel"><Method Name="OnGet():System.Void"><Statement FileIndex="1" Line="5" Covered="True" /></Method></Type>
+                  <Type Name="DetailsModel"><Method Name="OnGet():System.Void"><Statement FileIndex="2" Line="5" Covered="False" /></Method></Type>
+                  <Type Name="EditModel"><Method Name="OnGet():System.Void"><Statement FileIndex="3" Line="5" Covered="True" /></Method></Type>
+                </Namespace>
+              </Assembly>
+            </Root>
+            """);
+        var output = workspace.PathOf("selected-coverage.xlsx");
+
+        var result = await new ExcelReportGenerationService().GenerateAsync(new ExcelReportGenerationOptions(
+            project,
+            xml,
+            [index, details],
+            output,
+            "*.cs",
+            "*.g.cs;bin;obj"));
+
+        Assert.AreEqual(2, result.Reports.Count);
+        Assert.IsTrue(result.Reports.All(report => report.Files.Count == 1));
+        using var workbook = new XLWorkbook(result.OutputPath);
+        Assert.AreEqual(2, workbook.Worksheets.Count);
+        var indexSheet = workbook.Worksheet("Index.cshtml.cs");
+        var detailsSheet = workbook.Worksheet("Details.cshtml.cs");
+        Assert.AreEqual(@"Pages\Index.cshtml.cs", indexSheet.Cell(3, 2).GetString());
+        Assert.AreEqual(@"Pages\Products\Details.cshtml.cs", detailsSheet.Cell(3, 2).GetString());
+        Assert.IsTrue(indexSheet.CellsUsed().Any(cell => cell.GetString().Contains("var index = 1;")));
+        Assert.IsFalse(indexSheet.CellsUsed().Any(cell => cell.GetString().Contains("var details = 1;")));
+        Assert.IsTrue(detailsSheet.CellsUsed().Any(cell => cell.GetString().Contains("var details = 1;")));
+        Assert.IsFalse(workbook.Worksheets.Any(sheet => sheet.Name == "Edit.cshtml.cs"));
+    }
 }

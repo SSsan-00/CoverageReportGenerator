@@ -5,7 +5,7 @@ using CoverageReportGenerator.Core.Utilities;
 namespace CoverageReportGenerator.Core.Rendering;
 
 /// <summary>
-/// 単一ファイルのカバレッジレポートをExcelブックへ描画する。
+/// ファイル単位のカバレッジレポートをExcelブックへ描画する。
 /// </summary>
 public sealed class ExcelFileCoverageReportRenderer
 {
@@ -23,10 +23,24 @@ public sealed class ExcelFileCoverageReportRenderer
     public void RenderToFile(CoverageReport report, string outputPath)
     {
         ArgumentNullException.ThrowIfNull(report);
+        RenderToFile([report], outputPath);
+    }
+
+    /// <summary>
+    /// 複数ファイルのレポートをシートごとに書き出す。
+    /// </summary>
+    public void RenderToFile(IReadOnlyList<CoverageReport> reports, string outputPath)
+    {
+        ArgumentNullException.ThrowIfNull(reports);
         ArgumentException.ThrowIfNullOrWhiteSpace(outputPath);
-        if (report.Files.Count != 1)
+        if (reports.Count == 0)
         {
-            throw new ArgumentException("Excel export requires a single selected file report.", nameof(report));
+            throw new ArgumentException("Excel export requires at least one selected file report.", nameof(reports));
+        }
+
+        if (reports.Any(report => report.Files.Count != 1))
+        {
+            throw new ArgumentException("Excel export requires each report to contain a single selected file.", nameof(reports));
         }
 
         var directory = Path.GetDirectoryName(outputPath);
@@ -36,9 +50,46 @@ public sealed class ExcelFileCoverageReportRenderer
         }
 
         using var workbook = new XLWorkbook();
-        var worksheet = workbook.Worksheets.Add("Coverage");
-        RenderWorksheet(worksheet, report, report.Files[0]);
+        var usedSheetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var report in reports)
+        {
+            var file = report.Files[0];
+            var worksheet = workbook.Worksheets.Add(SheetNameFor(file.RelativePath, usedSheetNames, reports.Count == 1));
+            RenderWorksheet(worksheet, report, file);
+        }
+
         workbook.SaveAs(outputPath);
+    }
+
+    private static string SheetNameFor(string relativePath, ISet<string> usedSheetNames, bool singleSheet)
+    {
+        var baseName = singleSheet ? "Coverage" : Path.GetFileName(relativePath);
+        baseName = SanitizeSheetName(baseName);
+        var sheetName = TruncateSheetName(baseName);
+        var suffix = 2;
+        while (!usedSheetNames.Add(sheetName))
+        {
+            var marker = $" ({suffix})";
+            sheetName = TruncateSheetName(baseName, marker);
+            suffix++;
+        }
+
+        return sheetName;
+    }
+
+    private static string SanitizeSheetName(string value)
+    {
+        var invalidChars = new HashSet<char>(['[', ']', ':', '*', '?', '/', '\\']);
+        var sanitized = new string(value.Select(ch => invalidChars.Contains(ch) ? '_' : ch).ToArray()).Trim('\'');
+        return string.IsNullOrWhiteSpace(sanitized) ? "Coverage" : sanitized;
+    }
+
+    private static string TruncateSheetName(string value, string suffix = "")
+    {
+        const int maxLength = 31;
+        var available = maxLength - suffix.Length;
+        var prefix = value.Length <= available ? value : value[..available];
+        return prefix + suffix;
     }
 
     private static void RenderWorksheet(IXLWorksheet worksheet, CoverageReport report, FileCoverageReport file)

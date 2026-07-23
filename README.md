@@ -29,7 +29,7 @@ C# / WinForms で作成した、JetBrains dotCover DetailedXML から HTML / Exc
 - UTF-8 / UTF-16 / Shift_JIS / CP932 の XML とソース読み取り
 - 視覚的な HTML カバレッジ表示
 - メンバー名クリックによるソース行ジャンプ
-- 単一ファイルの Excel レポート出力
+- 選択した複数ファイルの Excel レポート出力
 - Excel 上での未カバー行 `※` 表示とメンバー定義行リンク
 
 ## 動作環境
